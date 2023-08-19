@@ -30,7 +30,7 @@
       packages.default = self.packages.${system}.boof;
 
       devShells.default = pkgs.mkShell {
-        buildInputs = [
+        nativeBuildInputs = [
           # build
           pkgs.cargo
           pkgs.cargo-edit
@@ -43,8 +43,15 @@
           pkgs.rustfmt
 
           # testing
+          pkgs.nodejs
           pkgs.nushell
         ];
+
+        buildInputs = [
+          pkgs.libiconv
+        ];
       };
+
+      formatter = pkgs.nixpkgs-fmt;
     });
 }
