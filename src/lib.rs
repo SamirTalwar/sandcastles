@@ -14,7 +14,7 @@ pub type Port = u16;
 
 pub struct Daemon {
     socket_path: PathBuf,
-    live_processes: LiveProcesses,
+    running_services: RunningServices,
 }
 
 impl Daemon {
@@ -25,19 +25,20 @@ impl Daemon {
             .set_nonblocking(true)
             .context("Could not configure the daemon socket")?;
         let (stop_sender, stop_receiver) = mpsc::channel::<UnixStream>();
-        let live_processes = LiveProcesses::new();
-        let live_processes_ = live_processes.clone();
+        let running_services = RunningServices::new();
+        let running_services_ = running_services.clone();
         thread::spawn(move || {
             for stream in listener.incoming() {
                 match stream {
                     Ok(stream) => {
                         let stop_sender_ = stop_sender.clone();
-                        let live_processes__ = live_processes_.clone();
+                        let running_services__ = running_services_.clone();
                         thread::spawn(|| {
                             stream.set_nonblocking(false).unwrap_or_else(|err| {
                                 eprintln!("Could not configure the server socket: {}", err)
                             });
-                            Self::handle_connection(stream, live_processes__, stop_sender_);
+                            Self::handle_connection(stream, running_services__, stop_sender_)
+                                .unwrap_or_else(|err| eprintln!("Request error: {}", err));
                         });
                     }
                     Err(err) => match err.kind() {
@@ -71,7 +72,7 @@ impl Daemon {
         });
         Ok(Self {
             socket_path,
-            live_processes,
+            running_services,
         })
     }
 
@@ -81,37 +82,27 @@ impl Daemon {
 
     fn handle_connection(
         mut stream: UnixStream,
-        live_processes: LiveProcesses,
+        running_services: RunningServices,
         stop_sender: mpsc::Sender<UnixStream>,
-    ) {
-        match bincode::deserialize_from(&mut stream) {
-            Ok(Request::Shutdown) => {
-                stop_sender
-                    .send(stream)
-                    .unwrap_or_else(|err| eprintln!("Failed to shut down the daemon: {}", err));
-            }
-            Ok(Request::Start(Service::Program(Program {
-                command,
-                arguments,
-                wait,
-            }))) => {
-                match Command::new(command).args(arguments).spawn() {
-                    Ok(process) => {
-                        live_processes.add(process);
-                        bincode::serialize_into(&mut stream, &Response::Success)
-                    }
-                    Err(err) => {
-                        eprintln!("Failed to start a process.");
-                        bincode::serialize_into(&mut stream, &Response::Failure(err.to_string()))
-                    }
+    ) -> anyhow::Result<()> {
+        let request =
+            bincode::deserialize_from(&mut stream).context("Failed to deserialize the request")?;
+        match request {
+            Request::Shutdown => stop_sender
+                .send(stream)
+                .context("Failed to shut down the daemon"),
+            Request::Start { service, wait } => match service.start() {
+                Ok(running_service) => {
+                    running_services.add(running_service);
+                    bincode::serialize_into(&mut stream, &Response::Success)
+                        .context("Failed to serialize the response")
                 }
-                .unwrap_or_else(|serialize_err| {
-                    eprintln!("Failed to serialize the response: {}", serialize_err)
-                });
-            }
-            Err(err) => {
-                eprintln!("Failed to deserialize the request: {}", err);
-            }
+                Err(err) => {
+                    eprintln!("Failed to start a program: {}", err);
+                    bincode::serialize_into(&mut stream, &Response::Failure(err.to_string()))
+                        .context("Failed to serialize the response")
+                }
+            },
         }
     }
 
@@ -131,36 +122,30 @@ impl Drop for Daemon {
             .unwrap_or_else(|err| eprintln!("Could not request the daemon to shut down: {}", err));
         fs::remove_file(&self.socket_path)
             .unwrap_or_else(|err| eprintln!("An error occurred during shutdown: {}", err));
-        self.live_processes
+        self.running_services
             .shutdown()
             .unwrap_or_else(|err| eprintln!("An error occurred during shutdown: {}", err));
     }
 }
 
 #[derive(Clone)]
-struct LiveProcesses(Arc<Mutex<Vec<Child>>>);
+struct RunningServices(Arc<Mutex<Vec<RunningService>>>);
 
-impl LiveProcesses {
+impl RunningServices {
     fn new() -> Self {
         Self(Arc::new(Mutex::new(Vec::new())))
     }
 
-    fn add(&self, process: Child) {
+    fn add(&self, service: RunningService) {
         let mut inner = self.0.lock().unwrap();
-        inner.push(process);
+        inner.push(service);
     }
 
     fn shutdown(&mut self) -> anyhow::Result<()> {
         let mut inner = self.0.lock().unwrap();
         inner
             .drain(..)
-            .map(|process| -> anyhow::Result<()> {
-                nix::sys::signal::kill(
-                    nix::unistd::Pid::from_raw(process.id().try_into()?),
-                    nix::sys::signal::Signal::SIGTERM,
-                )?;
-                Ok(())
-            })
+            .map(|mut service| service.stop())
             .collect::<Vec<anyhow::Result<()>>>()
             .into_iter()
             .collect::<anyhow::Result<()>>()
@@ -178,8 +163,8 @@ impl Client {
         Ok(Client { socket })
     }
 
-    pub fn start(&mut self, service: Service) -> anyhow::Result<()> {
-        bincode::serialize_into(&mut self.socket, &Request::Start(service))
+    pub fn start(&mut self, service: Service, wait: WaitFor) -> anyhow::Result<()> {
+        bincode::serialize_into(&mut self.socket, &Request::Start { service, wait })
             .context("Could not serialize the request")?;
         let response = bincode::deserialize_from(&mut self.socket)
             .context("Could not deserialize the response")?;
@@ -195,11 +180,40 @@ pub enum Service {
     Program(Program),
 }
 
+impl Service {
+    fn start(&self) -> anyhow::Result<RunningService> {
+        match self {
+            Self::Program(Program { command, arguments }) => {
+                let process = Command::new(command).args(arguments).spawn()?;
+                Ok(RunningService::Program(process))
+            }
+        }
+    }
+}
+
+enum RunningService {
+    Program(Child),
+}
+
+impl RunningService {
+    fn stop(&mut self) -> anyhow::Result<()> {
+        match self {
+            Self::Program(process) => {
+                let process_id = process.id();
+                nix::sys::signal::kill(
+                    nix::unistd::Pid::from_raw(process_id.try_into()?),
+                    nix::sys::signal::Signal::SIGTERM,
+                )
+                .context(format!("Failed to stop the process with ID {}", process_id))
+            }
+        }
+    }
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Program {
     pub command: OsString,
     pub arguments: Vec<OsString>,
-    pub wait: WaitFor,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -209,7 +223,7 @@ pub enum WaitFor {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 enum Request {
-    Start(Service),
+    Start { service: Service, wait: WaitFor },
     Shutdown,
 }
 

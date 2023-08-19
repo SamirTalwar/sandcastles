@@ -27,11 +27,13 @@ fn example_program() -> anyhow::Result<()> {
         );
 
         let mut client = Client::connect_to(&daemon)?;
-        client.start(Service::Program(Program {
-            command: "node".into(),
-            arguments: vec![server_script.into()],
-            wait: WaitFor::Port(SERVER_PORT),
-        }))?;
+        client.start(
+            Service::Program(Program {
+                command: "node".into(),
+                arguments: vec![server_script.into()],
+            }),
+            WaitFor::Port(SERVER_PORT),
+        )?;
 
         std::thread::sleep(std::time::Duration::from_secs(1));
         assert!(
