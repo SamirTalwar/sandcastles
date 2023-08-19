@@ -226,7 +226,12 @@ impl RunningService {
                     nix::unistd::Pid::from_raw(process_id.try_into()?),
                     nix::sys::signal::Signal::SIGTERM,
                 )
-                .context(format!("Failed to stop the process with ID {}", process_id))
+                .context(format!("Failed to stop the process with ID {}", process_id))?;
+                process.wait().context(format!(
+                    "Failed to wait for the process with ID {} to stop.",
+                    process_id
+                ))?;
+                Ok(())
             }
         }
     }

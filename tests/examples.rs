@@ -46,7 +46,6 @@ fn example_program() -> anyhow::Result<()> {
         Ok::<(), anyhow::Error>(())
     }?;
 
-    std::thread::sleep(std::time::Duration::from_secs(1));
     assert!(
         SERVER_PORT.is_available(),
         "the service has not shut down correctly"
