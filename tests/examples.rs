@@ -1,4 +1,3 @@
-use std::net;
 use std::path::PathBuf;
 
 use anyhow::Context;
@@ -10,7 +9,7 @@ fn example_program() -> anyhow::Result<()> {
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").context("Missing CARGO_MANIFEST_DIR")?);
     let server_script = root.join("tests/server.js");
 
-    static SERVER_PORT: Port = 8080;
+    static SERVER_PORT: Port = Port(8080);
     let server_url = format!("http://localhost:{}/", SERVER_PORT);
 
     let daemon_socket_dir = tempfile::Builder::new()
@@ -35,9 +34,8 @@ fn example_program() -> anyhow::Result<()> {
             WaitFor::Port(SERVER_PORT),
         )?;
 
-        std::thread::sleep(std::time::Duration::from_secs(1));
         assert!(
-            service_running_on_port(SERVER_PORT),
+            SERVER_PORT.is_in_use(),
             "the service has not started correctly"
         );
 
@@ -50,7 +48,7 @@ fn example_program() -> anyhow::Result<()> {
 
     std::thread::sleep(std::time::Duration::from_secs(1));
     assert!(
-        !service_running_on_port(8080),
+        SERVER_PORT.is_available(),
         "the service has not shut down correctly"
     );
 
@@ -60,10 +58,4 @@ fn example_program() -> anyhow::Result<()> {
     );
 
     Ok(())
-}
-
-fn service_running_on_port(port: Port) -> bool {
-    let socket_address = net::SocketAddrV4::new(net::Ipv4Addr::UNSPECIFIED, port);
-    let result = net::TcpListener::bind(socket_address);
-    result.is_err()
 }

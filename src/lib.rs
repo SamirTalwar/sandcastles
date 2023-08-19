@@ -1,4 +1,7 @@
 use std::ffi::OsString;
+use std::fs;
+use std::io;
+use std::net;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::Child;
@@ -6,11 +9,29 @@ use std::process::Command;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use std::{fs, io};
 
 use anyhow::Context;
 
-pub type Port = u16;
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct Port(pub u16);
+
+impl std::fmt::Display for Port {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Port {
+    pub fn is_available(&self) -> bool {
+        let socket_address = net::SocketAddrV4::new(net::Ipv4Addr::UNSPECIFIED, self.0);
+        let result = net::TcpListener::bind(socket_address);
+        result.is_ok()
+    }
+
+    pub fn is_in_use(&self) -> bool {
+        !self.is_available()
+    }
+}
 
 pub struct Daemon {
     socket_path: PathBuf,
@@ -94,6 +115,7 @@ impl Daemon {
             Request::Start { service, wait } => match service.start() {
                 Ok(running_service) => {
                     running_services.add(running_service);
+                    wait.block_until_ready()?;
                     bincode::serialize_into(&mut stream, &Response::Success)
                         .context("Failed to serialize the response")
                 }
@@ -219,6 +241,19 @@ pub struct Program {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum WaitFor {
     Port(Port),
+}
+
+impl WaitFor {
+    fn block_until_ready(&self) -> anyhow::Result<()> {
+        match self {
+            Self::Port(port) => {
+                while port.is_available() {
+                    thread::yield_now();
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
