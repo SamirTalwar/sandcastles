@@ -1,11 +1,12 @@
 use std::ffi::OsString;
-use std::fs;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::Child;
 use std::process::Command;
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
+use std::time::Duration;
+use std::{fs, io};
 
 use anyhow::Context;
 
@@ -20,20 +21,51 @@ impl Daemon {
     pub fn with_socket(socket_path: PathBuf) -> anyhow::Result<Self> {
         let listener =
             UnixListener::bind(&socket_path).context("Could not create the daemon socket")?;
+        listener
+            .set_nonblocking(true)
+            .context("Could not configure the daemon socket")?;
+        let (stop_sender, stop_receiver) = mpsc::channel::<UnixStream>();
         let live_processes = LiveProcesses::new();
         let live_processes_ = live_processes.clone();
         thread::spawn(move || {
             for stream in listener.incoming() {
                 match stream {
                     Ok(stream) => {
-                        if !Self::handle_connection(live_processes_.clone(), stream) {
+                        let stop_sender_ = stop_sender.clone();
+                        let live_processes__ = live_processes_.clone();
+                        thread::spawn(|| {
+                            stream.set_nonblocking(false).unwrap_or_else(|err| {
+                                eprintln!("Could not configure the server socket: {}", err)
+                            });
+                            Self::handle_connection(stream, live_processes__, stop_sender_);
+                        });
+                    }
+                    Err(err) => match err.kind() {
+                        io::ErrorKind::WouldBlock => {
+                            match stop_receiver.try_recv() {
+                                Ok(mut stream) => {
+                                    bincode::serialize_into(&mut stream, &Response::Success)
+                                        .unwrap_or_else(|err| {
+                                            eprintln!(
+                                                "Failed to serialize the shutdown response: {}",
+                                                err
+                                            )
+                                        });
+                                    break;
+                                }
+                                Err(mpsc::TryRecvError::Empty) => {}
+                                Err(mpsc::TryRecvError::Disconnected) => {
+                                    eprintln!("The stop signal has been disconnected. Aborting.");
+                                    break;
+                                }
+                            }
+                            thread::sleep(Duration::from_millis(100));
+                        }
+                        _ => {
+                            eprintln!("Connection failed: {}", err);
                             break;
                         }
-                    }
-                    Err(err) => {
-                        eprintln!("Connection failed: {}", err);
-                        break;
-                    }
+                    },
                 }
             }
         });
@@ -47,15 +79,16 @@ impl Daemon {
         &self.socket_path
     }
 
-    fn handle_connection(live_processes: LiveProcesses, mut stream: UnixStream) -> bool {
+    fn handle_connection(
+        mut stream: UnixStream,
+        live_processes: LiveProcesses,
+        stop_sender: mpsc::Sender<UnixStream>,
+    ) {
         match bincode::deserialize_from(&mut stream) {
             Ok(Request::Shutdown) => {
-                bincode::serialize_into(&mut stream, &Response::Success).unwrap_or_else(
-                    |serialize_err| {
-                        eprintln!("Failed to serialize the response: {}", serialize_err)
-                    },
-                );
-                false
+                stop_sender
+                    .send(stream)
+                    .unwrap_or_else(|err| eprintln!("Failed to shut down the daemon: {}", err));
             }
             Ok(Request::Start(Service::Program(Program {
                 command,
@@ -75,11 +108,9 @@ impl Daemon {
                 .unwrap_or_else(|serialize_err| {
                     eprintln!("Failed to serialize the response: {}", serialize_err)
                 });
-                true
             }
             Err(err) => {
                 eprintln!("Failed to deserialize the request: {}", err);
-                true
             }
         }
     }
