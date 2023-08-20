@@ -25,7 +25,7 @@ fn example_program() -> anyhow::Result<()> {
             "the daemon socket has not been created"
         );
 
-        let mut client = Client::connect_to(&daemon)?;
+        let mut client = Client::connect_to(daemon.socket())?;
         client.start(
             Service::Program(Program {
                 command: "node".into(),
