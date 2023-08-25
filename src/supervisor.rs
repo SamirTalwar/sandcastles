@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use anyhow::Context;
 
@@ -23,7 +24,7 @@ impl Supervisor {
         let running = service.start().context("Failed to start a service")?;
         let mut inner = self.0.lock().unwrap();
         inner.add(running);
-        wait.block_until_ready()?;
+        wait.block_until_ready(Duration::MAX)?; // we need to pick a global timeout here
         Ok(())
     }
 

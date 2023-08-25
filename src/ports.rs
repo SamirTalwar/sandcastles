@@ -1,3 +1,4 @@
+use std::io;
 use std::net;
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
@@ -18,5 +19,12 @@ impl Port {
 
     pub fn is_in_use(&self) -> bool {
         !self.is_available()
+    }
+
+    pub fn next_available() -> io::Result<Self> {
+        let socket_address = net::SocketAddrV4::new(net::Ipv4Addr::UNSPECIFIED, 0);
+        let bound = net::TcpListener::bind(socket_address)?;
+        let port_number = bound.local_addr()?.port();
+        Ok(Self(port_number))
     }
 }
