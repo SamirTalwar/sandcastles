@@ -1,4 +1,5 @@
-use crate::services::{Service, WaitFor};
+use crate::services::Service;
+use crate::WaitFor;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub(crate) enum Request {

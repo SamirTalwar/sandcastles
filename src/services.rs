@@ -1,12 +1,8 @@
 use std::ffi::OsString;
 use std::process::Child;
 use std::process::Command;
-use std::thread;
-use std::time::Duration;
 
 use anyhow::Context;
-
-use crate::ports::Port;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum Service {
@@ -52,29 +48,4 @@ impl RunningService {
 pub struct Program {
     pub command: OsString,
     pub arguments: Vec<OsString>,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub enum WaitFor {
-    None,
-    Time(Duration),
-    Port(Port),
-}
-
-impl WaitFor {
-    pub(crate) fn block_until_ready(&self) -> anyhow::Result<()> {
-        match self {
-            Self::None => Ok(()),
-            Self::Time(duration) => {
-                thread::sleep(*duration);
-                Ok(())
-            }
-            Self::Port(port) => {
-                while port.is_available() {
-                    thread::yield_now();
-                }
-                Ok(())
-            }
-        }
-    }
 }

@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Context;
 
 use crate::services::*;
+use crate::WaitFor;
 
 #[derive(Clone)]
 pub struct Supervisor(Arc<Mutex<RunningServices>>);
@@ -65,6 +66,8 @@ impl Drop for RunningServices {
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
+
+    use crate::WaitFor;
 
     use super::*;
 

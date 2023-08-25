@@ -4,7 +4,8 @@ use std::path::Path;
 use anyhow::Context;
 
 use crate::communication::{Request, Response};
-use crate::services::{Service, WaitFor};
+use crate::services::Service;
+use crate::WaitFor;
 
 pub struct Client {
     socket: UnixStream,
