@@ -13,7 +13,6 @@ use crate::supervisor::Supervisor;
 
 pub struct Daemon {
     socket_path: PathBuf,
-    supervisor: Supervisor,
 }
 
 impl Daemon {
@@ -27,14 +26,10 @@ impl Daemon {
         listener
             .set_nonblocking(true)
             .context("Could not configure the daemon socket")?;
-        let supervisor_in_thread = supervisor.clone();
         thread::spawn(move || {
-            start(listener, supervisor_in_thread);
+            start(listener, supervisor);
         });
-        Ok(Self {
-            socket_path,
-            supervisor,
-        })
+        Ok(Self { socket_path })
     }
 
     pub fn socket(&self) -> &Path {
@@ -53,12 +48,9 @@ impl Daemon {
 
 impl Drop for Daemon {
     fn drop(&mut self) {
-        (self.stop())
+        self.stop()
             .unwrap_or_else(|err| eprintln!("Could not request the daemon to shut down: {}", err));
         fs::remove_file(&self.socket_path)
-            .unwrap_or_else(|err| eprintln!("An error occurred during shutdown: {}", err));
-        self.supervisor
-            .stop_all()
             .unwrap_or_else(|err| eprintln!("An error occurred during shutdown: {}", err));
     }
 }
@@ -68,21 +60,18 @@ fn start(listener: UnixListener, supervisor: Supervisor) {
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                let stop_sender_ = stop_sender.clone();
-                let running_services_ = supervisor.clone();
+                let supervisor_for_stream = supervisor.clone();
+                let stop_sender_for_stream = stop_sender.clone();
                 thread::spawn(|| {
                     stream.set_nonblocking(false).unwrap_or_else(|err| {
                         eprintln!("Could not configure the server socket: {}", err)
                     });
-                    handle_connection(stream, running_services_, stop_sender_)
+                    handle_connection(stream, supervisor_for_stream, stop_sender_for_stream)
                         .unwrap_or_else(|err| eprintln!("Request error: {}", err));
                 });
             }
             Err(err) => match err.kind() {
                 io::ErrorKind::WouldBlock => {
-                    if stop_requested(&stop_receiver) {
-                        break;
-                    }
                     thread::sleep(Duration::from_millis(100));
                 }
                 _ => {
@@ -90,6 +79,9 @@ fn start(listener: UnixListener, supervisor: Supervisor) {
                     break;
                 }
             },
+        };
+        if stop_requested(&stop_receiver) {
+            break;
         }
     }
 }
@@ -102,9 +94,6 @@ fn handle_connection(
     let request =
         bincode::deserialize_from(&mut stream).context("Failed to deserialize the request")?;
     match request {
-        Request::Shutdown => stop_sender
-            .send(stream)
-            .context("Failed to shut down the daemon"),
         Request::Start { service, wait } => match supervisor.start(service, wait) {
             Ok(()) => bincode::serialize_into(&mut stream, &Response::Success)
                 .context("Failed to serialize the response"),
@@ -114,6 +103,13 @@ fn handle_connection(
                     .context("Failed to serialize the response")
             }
         },
+        Request::Shutdown => {
+            supervisor.stop_all().unwrap(); // stop everything before responding
+            stop_sender
+                .send(stream)
+                .context("Failed to shut down the daemon")?;
+            Ok(())
+        }
     }
 }
 

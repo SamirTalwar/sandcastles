@@ -1,14 +1,9 @@
 use std::path::PathBuf;
 
-use anyhow::Context;
 use boof::*;
 
 #[test]
 fn example_program() -> anyhow::Result<()> {
-    let root =
-        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").context("Missing CARGO_MANIFEST_DIR")?);
-    let server_script = root.join("tests/services/http_hello_world.js");
-
     static SERVER_PORT: Port = Port(8080);
     let server_url = format!("http://localhost:{}/", SERVER_PORT);
 
@@ -26,13 +21,7 @@ fn example_program() -> anyhow::Result<()> {
         );
 
         let mut client = Client::connect_to(daemon.socket())?;
-        client.start(
-            Service::Program(Program {
-                command: "node".into(),
-                arguments: vec![server_script.into()],
-            }),
-            WaitFor::Port(SERVER_PORT),
-        )?;
+        client.start(http_hello_world(), WaitFor::Port(SERVER_PORT))?;
 
         assert!(
             SERVER_PORT.is_in_use(),
@@ -57,4 +46,14 @@ fn example_program() -> anyhow::Result<()> {
     );
 
     Ok(())
+}
+
+pub fn http_hello_world() -> Service {
+    let root =
+        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("Missing CARGO_MANIFEST_DIR"));
+    let server_script = root.join("tests/services/http_hello_world.js");
+    Service::Program(Program {
+        command: "node".into(),
+        arguments: vec![server_script.into()],
+    })
 }
