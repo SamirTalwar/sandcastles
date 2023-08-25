@@ -7,7 +7,7 @@ use boof::*;
 fn example_program() -> anyhow::Result<()> {
     let root =
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").context("Missing CARGO_MANIFEST_DIR")?);
-    let server_script = root.join("tests/server.js");
+    let server_script = root.join("tests/services/http_hello_world.js");
 
     static SERVER_PORT: Port = Port(8080);
     let server_url = format!("http://localhost:{}/", SERVER_PORT);
