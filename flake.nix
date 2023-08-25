@@ -25,13 +25,18 @@
       runtimeDependencies = pkgs.lib.optionals pkgs.stdenv.isDarwin [
         pkgs.libiconv
       ];
-    in
-    {
-      packages.boof = craneLib.buildPackage {
+      buildArguments = {
         src = craneLib.cleanCargoSource (craneLib.path ./.);
         buildInputs = runtimeDependencies;
-        doCheck = false; # checks are complicated; we do them outside Nix
       };
+    in
+    {
+      packages.boof-deps = craneLib.buildDepsOnly buildArguments;
+
+      packages.boof = craneLib.buildPackage (buildArguments // {
+        cargoArtifacts = self.packages.${system}.boof-deps;
+        doCheck = false; # checks are complicated; we do them outside Nix
+      });
 
       packages.default = self.packages.${system}.boof;
 
