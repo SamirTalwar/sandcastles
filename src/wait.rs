@@ -84,10 +84,10 @@ mod tests {
         thread::spawn(move || {
             let socket_address = net::SocketAddrV4::new(net::Ipv4Addr::UNSPECIFIED, port.0);
             let listener = net::TcpListener::bind(socket_address).unwrap();
-            listener.accept().unwrap();
+            listener.accept().unwrap(); // block until we receive a connection
         });
 
-        wait.block_until_ready(Duration::from_secs(5))?;
+        wait.block_until_ready(Duration::from_secs(1))?;
 
         Ok(())
     }
@@ -95,6 +95,9 @@ mod tests {
     #[test]
     fn test_time_out_waiting_for_port() -> anyhow::Result<()> {
         let port = Port::next_available()?;
+        if port.is_in_use() {
+            panic!("Port {} is supposed to be available but is in use.", port);
+        }
         let wait = WaitFor::Port(port);
 
         let actual = wait.block_until_ready(Duration::from_millis(100));
