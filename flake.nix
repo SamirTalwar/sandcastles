@@ -21,10 +21,16 @@
     let
       pkgs = import nixpkgs { inherit system; };
       craneLib = crane.lib.${system};
+
+      runtimeDependencies = pkgs.lib.optionals pkgs.stdenv.isDarwin [
+        pkgs.libiconv
+      ];
     in
     {
       packages.boof = craneLib.buildPackage {
         src = craneLib.cleanCargoSource (craneLib.path ./.);
+        buildInputs = runtimeDependencies;
+        doCheck = false; # checks are complicated; we do them outside Nix
       };
 
       packages.default = self.packages.${system}.boof;
@@ -47,9 +53,7 @@
           pkgs.nushell
         ];
 
-        buildInputs = [
-          pkgs.libiconv
-        ];
+        buildInputs = runtimeDependencies;
       };
 
       formatter = pkgs.nixpkgs-fmt;
