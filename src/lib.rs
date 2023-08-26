@@ -6,6 +6,8 @@ pub mod services;
 pub mod supervisor;
 pub mod wait;
 
+mod test_services;
+
 pub use client::Client;
 pub use daemon::Daemon;
 pub use ports::Port;

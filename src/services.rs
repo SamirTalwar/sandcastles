@@ -1,8 +1,6 @@
-use std::ffi::OsString;
-use std::process::Child;
-use std::process::Command;
+pub mod programs;
 
-use anyhow::Context;
+pub use programs::*;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum Service {
@@ -12,40 +10,19 @@ pub enum Service {
 impl Service {
     pub(crate) fn start(&self) -> anyhow::Result<RunningService> {
         match self {
-            Self::Program(Program { command, arguments }) => {
-                let process = Command::new(command).args(arguments).spawn()?;
-                Ok(RunningService::Program(process))
-            }
+            Self::Program(p) => p.start().map(RunningService::Program),
         }
     }
 }
 
 pub(crate) enum RunningService {
-    Program(Child),
+    Program(RunningProgram),
 }
 
 impl RunningService {
     pub(crate) fn stop(&mut self) -> anyhow::Result<()> {
         match self {
-            Self::Program(process) => {
-                let process_id = process.id();
-                nix::sys::signal::kill(
-                    nix::unistd::Pid::from_raw(process_id.try_into()?),
-                    nix::sys::signal::Signal::SIGTERM,
-                )
-                .context(format!("Failed to stop the process with ID {}", process_id))?;
-                process.wait().context(format!(
-                    "Failed to wait for the process with ID {} to stop.",
-                    process_id
-                ))?;
-                Ok(())
-            }
+            Self::Program(p) => p.stop(),
         }
     }
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct Program {
-    pub command: OsString,
-    pub arguments: Vec<OsString>,
 }

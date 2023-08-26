@@ -68,7 +68,8 @@ impl Drop for RunningServices {
 mod tests {
     use std::time::Duration;
 
-    use crate::WaitFor;
+    use crate::test_services;
+    use crate::wait::WaitFor;
 
     use super::*;
 
@@ -85,22 +86,5 @@ mod tests {
         assert_eq!(response_body, "Hello, world!");
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod test_services {
-    use std::path::PathBuf;
-
-    use crate::{Program, Service};
-
-    pub fn http_hello_world() -> Service {
-        let root =
-            PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("Missing CARGO_MANIFEST_DIR"));
-        let server_script = root.join("tests/services/http_hello_world.js");
-        Service::Program(Program {
-            command: "node".into(),
-            arguments: vec![server_script.into()],
-        })
     }
 }
