@@ -120,21 +120,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4682ae6287fcf752ecaabbfcc7b6f9b72aa33933dc23a554d853aea8eea8635"
 
 [[package]]
-name = "boof"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bincode",
- "clap",
- "nix",
- "ntest",
- "reqwest",
- "serde",
- "signal-hook",
- "tempfile",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -704,6 +689,21 @@ name = "ryu"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ad4cc8da4ef723ed60bced201181d83791ad433213d8c24efffda1eec85d741"
+
+[[package]]
+name = "sandcastles"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "clap",
+ "nix",
+ "ntest",
+ "reqwest",
+ "serde",
+ "signal-hook",
+ "tempfile",
+]
 
 [[package]]
 name = "serde"

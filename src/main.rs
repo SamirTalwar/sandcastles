@@ -6,7 +6,7 @@ use std::sync::Arc;
 use clap::Parser;
 use signal_hook::consts::signal;
 
-use boof::Daemon;
+use sandcastles::Daemon;
 
 #[derive(Debug, clap::Parser)]
 #[command(author, version, about, long_about = None)]
@@ -63,6 +63,6 @@ fn default_socket_path() -> PathBuf {
             .into_iter()
             .collect()
         })
-        .join("boof")
+        .join("sandcastles")
         .join("daemon.socket")
 }

@@ -1,5 +1,5 @@
 {
-  description = "Boof";
+  description = "sandcastles";
 
   inputs = {
     flake-utils.url = github:numtide/flake-utils;
@@ -31,14 +31,14 @@
       };
     in
     {
-      packages.boof-deps = craneLib.buildDepsOnly buildArguments;
+      packages.sandcastles-deps = craneLib.buildDepsOnly buildArguments;
 
-      packages.boof = craneLib.buildPackage (buildArguments // {
-        cargoArtifacts = self.packages.${system}.boof-deps;
+      packages.sandcastles = craneLib.buildPackage (buildArguments // {
+        cargoArtifacts = self.packages.${system}.sandcastles-deps;
         doCheck = false; # checks are complicated; we do them outside Nix
       });
 
-      packages.default = self.packages.${system}.boof;
+      packages.default = self.packages.${system}.sandcastles;
 
       devShells.default = pkgs.mkShell {
         nativeBuildInputs = [

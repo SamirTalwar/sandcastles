@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use boof::*;
+use sandcastles::*;
 
 #[test]
 fn example_program() -> anyhow::Result<()> {
@@ -8,7 +8,7 @@ fn example_program() -> anyhow::Result<()> {
     let server_url = format!("http://localhost:{}/", SERVER_PORT);
 
     let daemon_socket_dir = tempfile::Builder::new()
-        .prefix("boof-test-daemon")
+        .prefix("sandcastles-test-daemon")
         .tempdir()?;
     let daemon_socket = daemon_socket_dir.path().join("socket");
 
