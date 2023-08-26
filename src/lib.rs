@@ -6,6 +6,7 @@ pub mod services;
 pub mod supervisor;
 pub mod wait;
 
+mod test_programs;
 mod test_services;
 
 pub use client::Client;

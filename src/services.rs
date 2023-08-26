@@ -1,5 +1,7 @@
 pub mod programs;
 
+use std::time::Duration;
+
 pub use programs::*;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -20,9 +22,9 @@ pub(crate) enum RunningService {
 }
 
 impl RunningService {
-    pub(crate) fn stop(&mut self) -> anyhow::Result<()> {
+    pub(crate) fn stop(&mut self, timeout: Duration) -> anyhow::Result<()> {
         match self {
-            Self::Program(p) => p.stop(),
+            Self::Program(p) => p.stop(timeout),
         }
     }
 }

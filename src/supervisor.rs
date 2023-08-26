@@ -4,7 +4,7 @@ use std::time::Duration;
 use anyhow::Context;
 
 use crate::services::*;
-use crate::WaitFor;
+use crate::wait::WaitFor;
 
 #[derive(Clone)]
 pub struct Supervisor(Arc<Mutex<RunningServices>>);
@@ -40,6 +40,8 @@ impl Supervisor {
 struct RunningServices(Vec<RunningService>);
 
 impl RunningServices {
+    const TIMEOUT: Duration = Duration::from_secs(10);
+
     fn new() -> Self {
         Self(Vec::new())
     }
@@ -51,7 +53,7 @@ impl RunningServices {
     fn stop_all(&mut self) -> anyhow::Result<()> {
         self.0
             .drain(..)
-            .map(|mut service| service.stop())
+            .map(|mut service| service.stop(Self::TIMEOUT))
             .collect::<Vec<anyhow::Result<()>>>()
             .into_iter()
             .collect::<anyhow::Result<()>>()
