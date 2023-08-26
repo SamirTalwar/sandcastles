@@ -1,8 +1,13 @@
 use std::fs;
 use std::io;
+use std::mem;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
@@ -12,35 +17,37 @@ use crate::awaiter::Awaiter;
 use crate::communication::{Request, Response};
 use crate::supervisor::Supervisor;
 
-enum StopRequest {
-    Internal(Awaiter),
-    Client(UnixStream),
+enum StopHandle {
+    Thread(thread::JoinHandle<()>),
+    Awaiter(Awaiter),
 }
 
 pub struct Daemon {
     socket_path: PathBuf,
-    stop_sender: mpsc::Sender<StopRequest>,
+    stop_handle: Mutex<StopHandle>,
+    stop_signal: Arc<AtomicBool>,
 }
 
 impl Daemon {
-    pub fn with_socket(socket_path: PathBuf) -> anyhow::Result<Self> {
-        Self::new(socket_path, Supervisor::new())
+    pub fn start_on_socket(socket_path: PathBuf) -> anyhow::Result<Self> {
+        Self::start(socket_path, Supervisor::new())
     }
 
-    pub fn new(socket_path: PathBuf, supervisor: Supervisor) -> anyhow::Result<Self> {
+    pub fn start(socket_path: PathBuf, supervisor: Supervisor) -> anyhow::Result<Self> {
         let listener =
             UnixListener::bind(&socket_path).context("Could not create the daemon socket")?;
         listener
             .set_nonblocking(true)
             .context("Could not configure the daemon socket")?;
-        let (stop_sender, stop_receiver) = mpsc::channel();
-        let stop_sender_for_start = stop_sender.clone();
-        thread::spawn(move || {
-            start(&supervisor, listener, stop_sender_for_start, stop_receiver);
+        let stop_signal = Arc::new(AtomicBool::new(false));
+        let stop_signal_for_start = Arc::clone(&stop_signal);
+        let thread_handle = thread::spawn(move || {
+            start(&supervisor, listener, stop_signal_for_start.as_ref());
         });
         Ok(Self {
             socket_path,
-            stop_sender,
+            stop_handle: Mutex::new(StopHandle::Thread(thread_handle)),
+            stop_signal,
         })
     }
 
@@ -48,30 +55,51 @@ impl Daemon {
         &self.socket_path
     }
 
-    pub fn stop(&mut self) -> anyhow::Result<()> {
-        let awaiter = Awaiter::new();
-        self.stop_sender
-            .send(StopRequest::Internal(awaiter.clone()))?;
-        awaiter.wait();
-        Ok(())
+    pub fn stop(&self) {
+        self.stop_signal.store(true, Ordering::Relaxed);
+    }
+
+    pub fn wait(&self) {
+        let (thread_handle, awaiter) = {
+            let mut stop_handle = self.stop_handle.lock().unwrap();
+            match &*stop_handle {
+                StopHandle::Thread(_) => {
+                    let awaiter = Awaiter::new();
+                    let StopHandle::Thread(handle) =
+                        mem::replace(&mut *stop_handle, StopHandle::Awaiter(awaiter.clone())) else {
+                            unreachable!()
+                        };
+                    (Some(handle), awaiter)
+                }
+                StopHandle::Awaiter(awaiter) => (None, awaiter.clone()),
+            }
+        };
+        match thread_handle {
+            Some(handle) => {
+                handle
+                    .join()
+                    .expect("Failed to wait for the daemon to shut down.");
+                awaiter.unlock();
+            }
+            None => {
+                awaiter.wait();
+            }
+        }
     }
 }
 
 impl Drop for Daemon {
     fn drop(&mut self) {
-        self.stop()
-            .unwrap_or_else(|err| eprintln!("Could not request the daemon to shut down: {}", err));
+        self.stop();
+        self.wait();
         fs::remove_file(&self.socket_path)
             .unwrap_or_else(|err| eprintln!("An error occurred during shutdown: {}", err));
     }
 }
 
-fn start(
-    supervisor: &Supervisor,
-    listener: UnixListener,
-    stop_sender: mpsc::Sender<StopRequest>,
-    stop_receiver: mpsc::Receiver<StopRequest>,
-) {
+fn start(supervisor: &Supervisor, listener: UnixListener, internal_stop_signal: &AtomicBool) {
+    eprintln!("Starting the daemon.");
+    let (stop_sender, stop_receiver) = mpsc::channel();
     for incoming in listener.incoming() {
         match incoming {
             Ok(stream) => {
@@ -99,16 +127,17 @@ fn start(
                 }
             },
         };
-        if stop_requested(supervisor, &stop_receiver) {
+        if stop_requested(supervisor, internal_stop_signal, &stop_receiver) {
             break;
         }
     }
+    eprintln!("The daemon has stopped.");
 }
 
 fn handle_connection(
     mut stream: UnixStream,
     supervisor: &Supervisor,
-    stop_sender: mpsc::Sender<StopRequest>,
+    stop_sender: mpsc::Sender<UnixStream>,
 ) -> anyhow::Result<()> {
     let request =
         bincode::deserialize_from(&mut stream).context("Failed to deserialize the request")?;
@@ -124,27 +153,28 @@ fn handle_connection(
         },
         Request::Shutdown => {
             stop_sender
-                .send(StopRequest::Client(stream))
+                .send(stream)
                 .context("Failed to shut down the daemon")?;
             Ok(())
         }
     }
 }
 
-fn stop_requested(supervisor: &Supervisor, stop_receiver: &mpsc::Receiver<StopRequest>) -> bool {
-    match stop_receiver.try_recv() {
-        Ok(stop_request) => {
+fn stop_requested(
+    supervisor: &Supervisor,
+    internal_stop_signal: &AtomicBool,
+    external_stop_receiver: &mpsc::Receiver<UnixStream>,
+) -> bool {
+    if internal_stop_signal.load(Ordering::Relaxed) {
+        supervisor.stop_all().unwrap(); // stop everything before responding
+        return true;
+    }
+    match external_stop_receiver.try_recv() {
+        Ok(mut stream) => {
             supervisor.stop_all().unwrap(); // stop everything before responding
-            match stop_request {
-                StopRequest::Internal(awaiter) => {
-                    awaiter.unlock();
-                }
-                StopRequest::Client(mut stream) => {
-                    bincode::serialize_into(&mut stream, &Response::Success).unwrap_or_else(
-                        |err| eprintln!("Failed to serialize the shutdown response: {}", err),
-                    );
-                }
-            }
+            bincode::serialize_into(&mut stream, &Response::Success).unwrap_or_else(|err| {
+                eprintln!("Failed to serialize the shutdown response: {}", err)
+            });
             true
         }
         Err(mpsc::TryRecvError::Empty) => false,

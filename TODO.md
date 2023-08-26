@@ -55,7 +55,7 @@ Expected functionality is as follows:
 
 ## Command-line interface
 
-- [ ] explicitly start the daemon
+- [x] explicitly start the daemon
 - [ ] initialize the daemon on first use
 - [ ] shut down the daemon
 - [ ] start a service

@@ -13,7 +13,7 @@ fn example_program() -> anyhow::Result<()> {
     let daemon_socket = daemon_socket_dir.path().join("socket");
 
     {
-        let daemon = Daemon::with_socket(daemon_socket.clone())?;
+        let daemon = Daemon::start_on_socket(daemon_socket.clone())?;
 
         assert!(
             daemon_socket.exists(),
