@@ -22,6 +22,8 @@ Expected functionality is as follows:
 - [ ] log when a process has been killed
 - [ ] detect when a process has stopped, and log it
 - [ ] group processes, and shut down entire process groups
+- [ ] capture the `PATH` from the client, not the daemon
+- [ ] sanitize all environment variables except those specified
 
 ## TCP ports
 
@@ -65,5 +67,6 @@ Expected functionality is as follows:
 ## Scoping
 
 - [ ] services scoped to a shell or other parent process
+- [ ] capture sanitized environment variables when creating the scope
 - [ ] shut down services automatically when out of scope
 - [ ] shut down the daemon automatically when everything is out of scope
