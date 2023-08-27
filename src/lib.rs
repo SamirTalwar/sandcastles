@@ -5,6 +5,7 @@ pub mod daemon;
 pub mod ports;
 pub mod services;
 pub mod supervisor;
+pub mod timing;
 pub mod wait;
 
 mod test_programs;

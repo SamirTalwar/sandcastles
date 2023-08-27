@@ -1,7 +1,8 @@
 use std::io;
 use std::net;
 use std::thread;
-use std::time::Duration;
+
+use crate::timing;
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct Port(pub u16);
@@ -32,7 +33,7 @@ impl Port {
         thread::yield_now();
         let port = Self(port_number);
         while port.is_in_use() {
-            thread::sleep(Duration::from_millis(100));
+            thread::sleep(timing::QUANTUM);
         }
         Ok(port)
     }

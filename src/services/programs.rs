@@ -5,6 +5,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::Context;
 
+use crate::timing;
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Program {
     pub command: OsString,
@@ -33,7 +35,7 @@ impl RunningProgram {
                 nix::sys::signal::kill(process_id, nix::sys::signal::Signal::SIGKILL)
                     .context(format!("Failed to kill the process with ID {}", process_id))?;
             }
-            thread::sleep(Duration::from_millis(100));
+            thread::sleep(timing::QUANTUM);
         }
         Ok(())
     }
@@ -45,6 +47,7 @@ mod tests {
     use std::time::Duration;
 
     use crate::test_programs;
+    use crate::timing;
 
     #[test]
     #[ntest::timeout(2000)]
@@ -52,7 +55,7 @@ mod tests {
         let program = test_programs::waits_for_termination();
         let mut running_program = program.start()?;
 
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(timing::QUANTUM);
         let exit_code_before_stop = running_program.process.try_wait()?;
         assert_eq!(exit_code_before_stop, None);
 
@@ -71,7 +74,7 @@ mod tests {
         let program = test_programs::ignores_termination();
         let mut running_program = program.start()?;
 
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(timing::QUANTUM);
         let exit_code_before_stop = running_program.process.try_wait()?;
         assert_eq!(exit_code_before_stop, None);
 

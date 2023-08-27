@@ -9,13 +9,13 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
-use std::time::Duration;
 
 use anyhow::Context;
 
 use crate::awaiter::Awaiter;
 use crate::communication::{Request, Response};
 use crate::supervisor::Supervisor;
+use crate::timing;
 
 enum StopHandle {
     Thread(thread::JoinHandle<()>),
@@ -119,7 +119,7 @@ fn start(supervisor: &Supervisor, listener: UnixListener, internal_stop_signal: 
             }
             Err(err) => match err.kind() {
                 io::ErrorKind::WouldBlock => {
-                    thread::sleep(Duration::from_millis(100));
+                    thread::sleep(timing::QUANTUM);
                 }
                 _ => {
                     eprintln!("Connection failed: {}", err);

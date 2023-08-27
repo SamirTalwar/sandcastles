@@ -1,9 +1,9 @@
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use anyhow::Context;
 
 use crate::services::*;
+use crate::timing;
 use crate::wait::WaitFor;
 
 #[derive(Clone)]
@@ -24,7 +24,7 @@ impl Supervisor {
         let running = service.start().context("Failed to start a service")?;
         let mut inner = self.0.lock().unwrap();
         inner.add(running);
-        wait.block_until_ready(Duration::MAX)?; // we need to pick a global timeout here
+        wait.block_until_ready(timing::FOREVER)?; // we need to pick a global timeout here
         Ok(())
     }
 
@@ -40,8 +40,6 @@ impl Supervisor {
 struct RunningServices(Vec<RunningService>);
 
 impl RunningServices {
-    const TIMEOUT: Duration = Duration::from_secs(10);
-
     fn new() -> Self {
         Self(Vec::new())
     }
@@ -53,7 +51,7 @@ impl RunningServices {
     fn stop_all(&mut self) -> anyhow::Result<()> {
         self.0
             .drain(..)
-            .map(|mut service| service.stop(Self::TIMEOUT))
+            .map(|mut service| service.stop(timing::STOP_TIMEOUT))
             .collect::<Vec<anyhow::Result<()>>>()
             .into_iter()
             .collect::<anyhow::Result<()>>()
@@ -68,8 +66,7 @@ impl Drop for RunningServices {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
+    use crate::ports::Port;
     use crate::test_services;
     use crate::wait::WaitFor;
 
@@ -78,10 +75,7 @@ mod tests {
     #[test]
     fn test_single_service() -> anyhow::Result<()> {
         let supervisor = Supervisor::new();
-        supervisor.start(
-            test_services::http_hello_world(),
-            WaitFor::Time(Duration::from_millis(100)),
-        )?;
+        supervisor.start(test_services::http_hello_world(), WaitFor::Port(Port(8080)))?;
 
         let response_body = reqwest::blocking::get("http://localhost:8080/")?.text()?;
 

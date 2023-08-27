@@ -2,6 +2,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::ports::Port;
+use crate::timing;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum WaitFor {
@@ -24,7 +25,7 @@ impl WaitFor {
             Self::Port(port) => {
                 let start_time = Instant::now();
                 while port.is_available() {
-                    thread::sleep(Duration::from_millis(100));
+                    thread::sleep(timing::QUANTUM);
                     if Instant::now() - start_time > timeout {
                         anyhow::bail!("Timed out waiting for port {}.", port);
                     }
