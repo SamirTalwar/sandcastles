@@ -21,7 +21,10 @@ fn example_program() -> anyhow::Result<()> {
         );
 
         let mut client = Client::connect_to(daemon.socket())?;
-        client.start(http_hello_world(), WaitFor::Port(SERVER_PORT))?;
+        client.start(Start {
+            service: http_hello_world(),
+            wait: WaitFor::Port(SERVER_PORT),
+        })?;
 
         assert!(
             SERVER_PORT.is_in_use(),

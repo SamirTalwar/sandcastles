@@ -142,7 +142,7 @@ fn handle_connection(
     let request =
         bincode::deserialize_from(&mut stream).context("Failed to deserialize the request")?;
     match request {
-        Request::Start { service, wait } => match supervisor.start(service, wait) {
+        Request::Start(instruction) => match supervisor.start(instruction) {
             Ok(()) => bincode::serialize_into(&mut stream, &Response::Success)
                 .context("Failed to serialize the response"),
             Err(err) => {

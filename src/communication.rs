@@ -1,9 +1,8 @@
-use crate::services::Service;
-use crate::WaitFor;
+use crate::services::Start;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub(crate) enum Request {
-    Start { service: Service, wait: WaitFor },
+    Start(Start),
     Shutdown,
 }
 

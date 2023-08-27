@@ -4,7 +4,6 @@ use anyhow::Context;
 
 use crate::services::*;
 use crate::timing;
-use crate::wait::WaitFor;
 
 #[derive(Clone)]
 pub struct Supervisor(Arc<Mutex<RunningServices>>);
@@ -20,11 +19,14 @@ impl Supervisor {
         Self(Arc::new(Mutex::new(RunningServices::new())))
     }
 
-    pub fn start(&self, service: Service, wait: WaitFor) -> anyhow::Result<()> {
-        let running = service.start().context("Failed to start a service")?;
+    pub fn start(&self, instruction: Start) -> anyhow::Result<()> {
+        let running = instruction
+            .service
+            .start()
+            .context("Failed to start a service")?;
         let mut inner = self.0.lock().unwrap();
         inner.add(running);
-        wait.block_until_ready(timing::FOREVER)?; // we need to pick a global timeout here
+        instruction.wait.block_until_ready(timing::FOREVER)?; // we need to pick a global timeout here
         Ok(())
     }
 
@@ -75,7 +77,10 @@ mod tests {
     #[test]
     fn test_single_service() -> anyhow::Result<()> {
         let supervisor = Supervisor::new();
-        supervisor.start(test_services::http_hello_world(), WaitFor::Port(Port(8080)))?;
+        supervisor.start(Start {
+            service: test_services::http_hello_world(),
+            wait: WaitFor::Port(Port(8080)),
+        })?;
 
         let response_body = reqwest::blocking::get("http://localhost:8080/")?.text()?;
 

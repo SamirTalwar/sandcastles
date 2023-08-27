@@ -4,8 +4,7 @@ use std::path::Path;
 use anyhow::Context;
 
 use crate::communication::{Request, Response};
-use crate::services::Service;
-use crate::WaitFor;
+use crate::services::Start;
 
 pub struct Client {
     socket: UnixStream,
@@ -18,8 +17,8 @@ impl Client {
         Ok(Client { socket })
     }
 
-    pub fn start(&mut self, service: Service, wait: WaitFor) -> anyhow::Result<()> {
-        bincode::serialize_into(&mut self.socket, &Request::Start { service, wait })
+    pub fn start(&mut self, instruction: Start) -> anyhow::Result<()> {
+        bincode::serialize_into(&mut self.socket, &Request::Start(instruction))
             .context("Could not serialize the request")?;
         let response = bincode::deserialize_from(&mut self.socket)
             .context("Could not deserialize the response")?;

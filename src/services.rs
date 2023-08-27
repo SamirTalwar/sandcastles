@@ -4,6 +4,14 @@ use std::time::Duration;
 
 pub use programs::*;
 
+use crate::wait::WaitFor;
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct Start {
+    pub service: Service,
+    pub wait: WaitFor,
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum Service {
     Program(Program),
