@@ -6,29 +6,37 @@ use std::sync::Arc;
 use clap::Parser;
 use signal_hook::consts::signal;
 
-use sandcastles::Daemon;
+use sandcastles::*;
 
-#[derive(Debug, clap::Parser)]
-#[command(author, version, about, long_about = None)]
-struct Arguments {
-    #[command(subcommand)]
-    command: Command,
-    #[arg(long = "socket-path")]
-    socket_path: Option<PathBuf>,
-}
+mod args {
+    use std::ffi::OsString;
+    use std::path::PathBuf;
 
-#[derive(Debug, clap::Subcommand)]
-enum Command {
-    Daemon,
-    Start,
-    Shutdown,
+    #[derive(Debug, clap::Parser)]
+    #[command(author, version, about, long_about = None)]
+    pub struct Arguments {
+        #[command(subcommand)]
+        pub command: Command,
+        #[arg(long = "socket-path")]
+        pub socket_path: Option<PathBuf>,
+    }
+
+    #[derive(Debug, clap::Subcommand)]
+    pub enum Command {
+        Daemon,
+        Start {
+            command: OsString,
+            arguments: Vec<OsString>,
+        },
+        Shutdown,
+    }
 }
 
 fn main() -> anyhow::Result<()> {
-    let args = Arguments::parse();
+    let args = args::Arguments::parse();
     let socket_path = args.socket_path.unwrap_or_else(default_socket_path);
     match args.command {
-        Command::Daemon => {
+        args::Command::Daemon => {
             if let Some(socket_dir) = socket_path.parent() {
                 fs::create_dir_all(socket_dir)?;
             }
@@ -46,8 +54,13 @@ fn main() -> anyhow::Result<()> {
             daemon.wait();
             Ok(())
         }
-        Command::Start => todo!("start"),
-        Command::Shutdown => todo!("shutdown"),
+        args::Command::Start { command, arguments } => {
+            Client::connect_to(&socket_path)?.start(Start {
+                service: Service::Program(Program { command, arguments }),
+                wait: WaitFor::None,
+            })
+        }
+        args::Command::Shutdown => Client::connect_to(&socket_path)?.shutdown(),
     }
 }
 

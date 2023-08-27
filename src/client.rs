@@ -18,7 +18,15 @@ impl Client {
     }
 
     pub fn start(&mut self, instruction: Start) -> anyhow::Result<()> {
-        bincode::serialize_into(&mut self.socket, &Request::Start(instruction))
+        self.send(&Request::Start(instruction))
+    }
+
+    pub fn shutdown(&mut self) -> Result<(), anyhow::Error> {
+        self.send(&Request::Shutdown)
+    }
+
+    fn send(&mut self, request: &Request) -> Result<(), anyhow::Error> {
+        bincode::serialize_into(&mut self.socket, request)
             .context("Could not serialize the request")?;
         let response = bincode::deserialize_from(&mut self.socket)
             .context("Could not deserialize the response")?;

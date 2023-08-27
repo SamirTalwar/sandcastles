@@ -14,7 +14,7 @@ Expected functionality is as follows:
 
 - [x] start processes
 - [ ] wait for a process to start, and check it hasn't immediately crashed
-- [ ] stop all processes on shutdown
+- [x] stop all processes on shutdown
 - [ ] provide a way to shut down a single process
 - [x] time out when waiting for a process to stop, and kill it
 - [ ] log when a process stops with a non-zero exit code
@@ -64,8 +64,8 @@ Expected functionality is as follows:
 
 - [x] explicitly start the daemon
 - [ ] initialize the daemon on first use
-- [ ] shut down the daemon
-- [ ] start a service
+- [x] shut down the daemon
+- [x] start a service
 - [ ] stop a service
 - [ ] natural syntax for waiting, health checks, and restart policies
 
