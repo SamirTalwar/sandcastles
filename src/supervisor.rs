@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::Context;
 
 use crate::services::*;
-use crate::timing;
+use crate::timing::Duration;
 
 #[derive(Clone)]
 pub struct Supervisor(Arc<Mutex<RunningServices>>);
@@ -26,7 +26,7 @@ impl Supervisor {
             .context("Failed to start a service")?;
         let mut inner = self.0.lock().unwrap();
         inner.add(running);
-        instruction.wait.block_until_ready(timing::FOREVER)?; // we need to pick a global timeout here
+        instruction.wait.block_until_ready(Duration::FOREVER)?; // we need to pick a global timeout here
         Ok(())
     }
 
@@ -53,7 +53,7 @@ impl RunningServices {
     fn stop_all(&mut self) -> anyhow::Result<()> {
         self.0
             .drain(..)
-            .map(|mut service| service.stop(timing::STOP_TIMEOUT))
+            .map(|mut service| service.stop(Duration::STOP_TIMEOUT))
             .collect::<Vec<anyhow::Result<()>>>()
             .into_iter()
             .collect::<anyhow::Result<()>>()

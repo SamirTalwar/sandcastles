@@ -15,7 +15,7 @@ use anyhow::Context;
 use crate::awaiter::Awaiter;
 use crate::communication::{Request, Response};
 use crate::supervisor::Supervisor;
-use crate::timing;
+use crate::timing::Duration;
 
 enum StopHandle {
     Thread(thread::JoinHandle<()>),
@@ -119,7 +119,7 @@ fn start(supervisor: &Supervisor, listener: UnixListener, internal_stop_signal: 
             }
             Err(err) => match err.kind() {
                 io::ErrorKind::WouldBlock => {
-                    thread::sleep(timing::QUANTUM);
+                    Duration::QUANTUM.sleep();
                 }
                 _ => {
                     eprintln!("Connection failed: {}", err);

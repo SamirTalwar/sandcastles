@@ -1,11 +1,10 @@
 use std::ffi::OsString;
 use std::process::{Child, Command};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::Context;
 
-use crate::timing;
+use crate::timing::Duration;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Program {
@@ -31,11 +30,11 @@ impl RunningProgram {
             .context(format!("Failed to stop the process with ID {}", process_id))?;
         let sigterm_time = Instant::now();
         while !matches!(self.process.try_wait(), Ok(Some(_))) {
-            if Instant::now() - sigterm_time > timeout {
+            if Instant::now() - sigterm_time > timeout.into() {
                 nix::sys::signal::kill(process_id, nix::sys::signal::Signal::SIGKILL)
                     .context(format!("Failed to kill the process with ID {}", process_id))?;
             }
-            thread::sleep(timing::QUANTUM);
+            Duration::QUANTUM.sleep();
         }
         Ok(())
     }
@@ -43,11 +42,8 @@ impl RunningProgram {
 
 #[cfg(test)]
 mod tests {
-    use std::thread;
-    use std::time::Duration;
-
     use crate::test_programs;
-    use crate::timing;
+    use crate::timing::{Duration, DurationUnit};
 
     #[test]
     #[ntest::timeout(2000)]
@@ -55,11 +51,11 @@ mod tests {
         let program = test_programs::waits_for_termination();
         let mut running_program = program.start()?;
 
-        thread::sleep(timing::QUANTUM);
+        Duration::QUANTUM.sleep();
         let exit_code_before_stop = running_program.process.try_wait()?;
         assert_eq!(exit_code_before_stop, None);
 
-        running_program.stop(Duration::from_secs(5))?;
+        running_program.stop(Duration::of(5, DurationUnit::Seconds))?;
 
         let exit_code_after_stop = running_program.process.try_wait()?;
         if exit_code_after_stop.is_none() {
@@ -74,11 +70,11 @@ mod tests {
         let program = test_programs::ignores_termination();
         let mut running_program = program.start()?;
 
-        thread::sleep(timing::QUANTUM);
+        Duration::QUANTUM.sleep();
         let exit_code_before_stop = running_program.process.try_wait()?;
         assert_eq!(exit_code_before_stop, None);
 
-        running_program.stop(Duration::from_secs(1))?;
+        running_program.stop(Duration::of(1, DurationUnit::Seconds))?;
 
         let exit_code_after_stop = running_program.process.try_wait()?;
         if exit_code_after_stop.is_none() {

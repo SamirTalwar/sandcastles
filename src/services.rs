@@ -1,9 +1,8 @@
 pub mod programs;
 
-use std::time::Duration;
-
 pub use programs::*;
 
+use crate::timing::Duration;
 use crate::wait::WaitFor;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
