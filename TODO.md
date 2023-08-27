@@ -25,6 +25,11 @@ Expected functionality is as follows:
 - [ ] capture the `PATH` from the client, not the daemon
 - [ ] sanitize all environment variables except those specified
 
+## Creating environments
+
+- [ ] accept a Nix expression to construct a Nix environment
+- [ ] run processes within a Nix environment
+
 ## TCP ports
 
 - [x] wait for a service to start on a given TCP port
@@ -70,3 +75,13 @@ Expected functionality is as follows:
 - [ ] capture sanitized environment variables when creating the scope
 - [ ] shut down services automatically when out of scope
 - [ ] shut down the daemon automatically when everything is out of scope
+
+## Sandboxing
+
+I have no plans to support sandboxes for now. However, I am writing down some
+ideas, which may or may not be possible.
+
+- run inside a Nix sandbox
+- run containers as well as processes
+  - using Docker
+  - using [`youki`](https://github.com/containers/youki)
