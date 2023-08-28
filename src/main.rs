@@ -9,8 +9,9 @@ use signal_hook::consts::signal;
 use sandcastles::*;
 
 mod args {
-    use std::ffi::OsString;
     use std::path::PathBuf;
+
+    use sandcastles::Argument;
 
     #[derive(Debug, clap::Parser)]
     #[command(author, version, about, long_about = None)]
@@ -25,8 +26,8 @@ mod args {
     pub enum Command {
         Daemon,
         Start {
-            command: OsString,
-            arguments: Vec<OsString>,
+            command: Argument,
+            arguments: Vec<Argument>,
         },
         Shutdown,
     }

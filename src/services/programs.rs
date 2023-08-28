@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::process::{Child, Command};
 use std::time::Instant;
 
@@ -6,10 +5,42 @@ use anyhow::Context;
 
 use crate::timing::Duration;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct Argument {
+    value: std::ffi::OsString,
+    rendered: String,
+}
+
+impl Argument {
+    pub fn new(into_value: impl Into<std::ffi::OsString>) -> Self {
+        let value = into_value.into();
+        let rendered = value.to_string_lossy().to_string();
+        Self { value, rendered }
+    }
+}
+
+impl<Value: Into<std::ffi::OsString>> From<Value> for Argument {
+    fn from(value: Value) -> Self {
+        Self::new(value)
+    }
+}
+
+impl AsRef<std::ffi::OsStr> for Argument {
+    fn as_ref(&self) -> &std::ffi::OsStr {
+        &self.value
+    }
+}
+
+impl std::fmt::Display for Argument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.rendered.fmt(f)
+    }
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Program {
-    pub command: OsString,
-    pub arguments: Vec<OsString>,
+    pub command: Argument,
+    pub arguments: Vec<Argument>,
 }
 
 pub struct RunningProgram {
