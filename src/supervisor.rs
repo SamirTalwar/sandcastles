@@ -111,7 +111,30 @@ mod tests {
             reqwest::blocking::get(format!("http://localhost:{}/", service_port))?.text()?;
 
         assert_eq!(response_body, "Hello, world!");
+        Ok(())
+    }
 
+    #[test]
+    fn test_stops_all_services_on_drop() -> anyhow::Result<()> {
+        let service_port = Port::next_available()?;
+
+        {
+            let supervisor = Supervisor::new();
+            supervisor.start(Start {
+                service: test_services::http_hello_world(service_port),
+                wait: WaitFor::Port(service_port),
+            })?;
+
+            assert!(
+                service_port.is_in_use(),
+                "The service did not start correctly."
+            );
+        }
+
+        assert!(
+            service_port.is_available(),
+            "The service did not stop correctly."
+        );
         Ok(())
     }
 

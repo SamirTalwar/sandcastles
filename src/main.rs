@@ -34,14 +34,11 @@ mod args {
         Shutdown,
     }
 
-    fn parse_env(arg: &str) -> Result<(Argument, Argument), anyhow::Error> {
+    fn parse_env(arg: &str) -> Result<(Argument, Argument), &'static str> {
         if let [name, value] = arg.splitn(2, '=').collect::<Vec<&str>>()[..] {
             Ok((name.into(), value.into()))
         } else {
-            Err(anyhow::anyhow!(
-                "Could not parse the environment variable assignment: {:?}",
-                arg,
-            ))
+            Err("must be in the format `NAME=VALUE`")
         }
     }
 }
