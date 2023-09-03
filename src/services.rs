@@ -3,13 +3,6 @@ pub mod programs;
 pub use programs::*;
 
 use crate::timing::Duration;
-use crate::wait::WaitFor;
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct Start {
-    pub service: Service,
-    pub wait: WaitFor,
-}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum Service {
