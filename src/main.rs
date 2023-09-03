@@ -28,8 +28,21 @@ mod args {
         Start {
             command: Argument,
             arguments: Vec<Argument>,
+            #[arg(long = "env", value_parser = parse_env)]
+            environment: Vec<(Argument, Argument)>,
         },
         Shutdown,
+    }
+
+    fn parse_env(arg: &str) -> Result<(Argument, Argument), anyhow::Error> {
+        if let [name, value] = arg.splitn(2, '=').collect::<Vec<&str>>()[..] {
+            Ok((name.into(), value.into()))
+        } else {
+            Err(anyhow::anyhow!(
+                "Could not parse the environment variable assignment: {:?}",
+                arg,
+            ))
+        }
     }
 }
 
@@ -55,12 +68,18 @@ fn main() -> anyhow::Result<()> {
             daemon.wait();
             Ok(())
         }
-        args::Command::Start { command, arguments } => {
-            Client::connect_to(&socket_path)?.start(Start {
-                service: Service::Program(Program { command, arguments }),
-                wait: WaitFor::None,
-            })
-        }
+        args::Command::Start {
+            command,
+            arguments,
+            environment,
+        } => Client::connect_to(&socket_path)?.start(Start {
+            service: Service::Program(Program {
+                command,
+                arguments,
+                environment: environment.into_iter().collect(),
+            }),
+            wait: WaitFor::None,
+        }),
         args::Command::Shutdown => Client::connect_to(&socket_path)?.shutdown(),
     }
 }

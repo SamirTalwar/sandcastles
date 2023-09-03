@@ -58,5 +58,6 @@ pub fn http_hello_world() -> Service {
     Service::Program(Program {
         command: "node".into(),
         arguments: vec![server_script.into()],
+        environment: Default::default(),
     })
 }

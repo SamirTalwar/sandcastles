@@ -100,13 +100,15 @@ mod tests {
 
     #[test]
     fn test_starts_a_single_service_and_waits_for_a_port() -> anyhow::Result<()> {
+        let service_port = Port::next_available()?;
         let supervisor = Supervisor::new();
         supervisor.start(Start {
-            service: test_services::http_hello_world(),
-            wait: WaitFor::Port(Port(8080)),
+            service: test_services::http_hello_world(service_port),
+            wait: WaitFor::Port(service_port),
         })?;
 
-        let response_body = reqwest::blocking::get("http://localhost:8080/")?.text()?;
+        let response_body =
+            reqwest::blocking::get(format!("http://localhost:{}/", service_port))?.text()?;
 
         assert_eq!(response_body, "Hello, world!");
 

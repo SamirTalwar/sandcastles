@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::process::{Child, Command};
 use std::time::Instant;
 
@@ -5,10 +6,48 @@ use anyhow::Context;
 
 use crate::timing::Duration;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Argument {
     value: std::ffi::OsString,
     rendered: String,
+}
+
+impl PartialEq for Argument {
+    fn eq(&self, other: &Self) -> bool {
+        self.value.eq(&other.value)
+    }
+}
+
+impl Eq for Argument {}
+
+impl PartialOrd for Argument {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.value.partial_cmp(&other.value)
+    }
+}
+
+impl Ord for Argument {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.value.cmp(&other.value)
+    }
+}
+
+impl std::hash::Hash for Argument {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value.hash(state)
+    }
+}
+
+impl serde::Serialize for Argument {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.value.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Argument {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        std::ffi::OsString::deserialize(deserializer).map(Self::new)
+    }
 }
 
 impl Argument {
@@ -37,10 +76,13 @@ impl std::fmt::Display for Argument {
     }
 }
 
+pub type Environment = BTreeMap<Argument, Argument>;
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Program {
     pub command: Argument,
     pub arguments: Vec<Argument>,
+    pub environment: Environment,
 }
 
 pub struct RunningProgram {
@@ -49,7 +91,10 @@ pub struct RunningProgram {
 
 impl Program {
     pub(crate) fn start(&self) -> anyhow::Result<RunningProgram> {
-        let process = Command::new(&self.command).args(&self.arguments).spawn()?;
+        let process = Command::new(&self.command)
+            .args(&self.arguments)
+            .envs(&self.environment)
+            .spawn()?;
         Ok(RunningProgram { process })
     }
 }
@@ -76,6 +121,8 @@ mod tests {
     use crate::test_programs;
     use crate::timing::{Duration, DurationUnit};
 
+    use super::*;
+
     #[test]
     #[ntest::timeout(2000)]
     fn test_starting_and_stopping() -> anyhow::Result<()> {
@@ -92,6 +139,28 @@ mod tests {
         if exit_code_after_stop.is_none() {
             panic!("Expected the process to have stopped.");
         }
+        Ok(())
+    }
+
+    #[test]
+    #[ntest::timeout(2000)]
+    fn test_environment_variables() -> anyhow::Result<()> {
+        let temporary_directory = tempfile::tempdir()?;
+        let test_file = temporary_directory.path().join("test.file");
+
+        let program = Program {
+            command: "bash".into(),
+            arguments: vec!["-c".into(), "echo $INPUT > $TEST_FILE".into()],
+            environment: Environment::from([
+                ("INPUT".into(), "hello there".into()),
+                ("TEST_FILE".into(), test_file.clone().into()),
+            ]),
+        };
+        program.start()?;
+
+        Duration::QUANTUM.sleep();
+        let output = std::fs::read_to_string(test_file)?;
+        assert_eq!(output, "hello there\n");
         Ok(())
     }
 

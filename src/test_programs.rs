@@ -9,6 +9,7 @@ pub fn waits_for_termination() -> Program {
     Program {
         command: "bash".into(),
         arguments: vec![script.into()],
+        environment: Default::default(),
     }
 }
 
@@ -17,6 +18,7 @@ pub fn ignores_termination() -> Program {
     Program {
         command: "bash".into(),
         arguments: vec![script.into()],
+        environment: Default::default(),
     }
 }
 
