@@ -64,6 +64,7 @@ Expected functionality is as follows:
 
 - [x] explicitly start the daemon
 - [ ] initialize the daemon on first use
+- [ ] refuse to start a daemon on the same socket as another
 - [x] shut down the daemon
 - [x] start a service
 - [ ] stop a service
