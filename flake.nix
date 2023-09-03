@@ -54,6 +54,8 @@
           pkgs.rustfmt
 
           # testing
+          pkgs.bash
+          pkgs.coreutils
           pkgs.nodejs
           pkgs.nushell
         ];

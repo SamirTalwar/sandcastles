@@ -68,6 +68,8 @@ impl Drop for RunningServices {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use crate::ports::Port;
     use crate::test_services;
     use crate::wait::WaitFor;
@@ -75,7 +77,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_single_service() -> anyhow::Result<()> {
+    fn test_starts_a_single_service() -> anyhow::Result<()> {
+        let output_directory = tempfile::tempdir()?;
+        let output_file = output_directory.path().join("timestamp.txt");
+
+        let supervisor = Supervisor::new();
+        supervisor.start(Start {
+            service: test_services::file_watch(&output_file, vec!["echo".into(), "output".into()]),
+            wait: WaitFor::None,
+        })?;
+
+        eventually(|| {
+            let output = fs::read_to_string(&output_file)?;
+            if output == "output\n" {
+                Ok(())
+            } else {
+                anyhow::bail!("Incorrect output: {:?}", output)
+            }
+        })
+    }
+
+    #[test]
+    fn test_starts_a_single_service_and_waits_for_a_port() -> anyhow::Result<()> {
         let supervisor = Supervisor::new();
         supervisor.start(Start {
             service: test_services::http_hello_world(),
@@ -87,5 +110,24 @@ mod tests {
         assert_eq!(response_body, "Hello, world!");
 
         Ok(())
+    }
+
+    fn eventually<A: std::fmt::Debug>(action: impl Fn() -> anyhow::Result<A>) -> anyhow::Result<A> {
+        let start_time = std::time::Instant::now();
+        loop {
+            let result = action();
+            match result {
+                Ok(_) => {
+                    return result;
+                }
+                Err(_) => {
+                    // fail if we've taken too long, otherwise retry after a short delay
+                    if std::time::Instant::now() - start_time >= std::time::Duration::from_secs(3) {
+                        return result;
+                    }
+                }
+            }
+            Duration::QUANTUM.sleep();
+        }
     }
 }
