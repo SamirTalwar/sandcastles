@@ -118,6 +118,7 @@ impl RunningProgram {
 
 #[cfg(test)]
 mod tests {
+    use crate::test_helpers::*;
     use crate::test_programs;
     use crate::timing::{Duration, DurationUnit};
 
@@ -158,10 +159,10 @@ mod tests {
         };
         program.start()?;
 
-        Duration::QUANTUM.sleep();
-        let output = std::fs::read_to_string(test_file)?;
-        assert_eq!(output, "hello there\n");
-        Ok(())
+        eventually(|| {
+            let output = std::fs::read_to_string(&test_file)?;
+            test_eq(output.as_str(), "hello there\n")
+        })
     }
 
     #[test]

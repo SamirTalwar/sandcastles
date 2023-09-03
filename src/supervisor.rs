@@ -72,6 +72,7 @@ mod tests {
     use std::fs;
 
     use crate::ports::Port;
+    use crate::test_helpers::*;
     use crate::test_services;
     use crate::wait::WaitFor;
 
@@ -90,11 +91,7 @@ mod tests {
 
         eventually(|| {
             let output = fs::read_to_string(&output_file)?;
-            if output == "output\n" {
-                Ok(())
-            } else {
-                anyhow::bail!("Incorrect output: {:?}", output)
-            }
+            test_eq(output.as_str(), "output\n")
         })
     }
 
@@ -136,24 +133,5 @@ mod tests {
             "The service did not stop correctly."
         );
         Ok(())
-    }
-
-    fn eventually<A: std::fmt::Debug>(action: impl Fn() -> anyhow::Result<A>) -> anyhow::Result<A> {
-        let start_time = std::time::Instant::now();
-        loop {
-            let result = action();
-            match result {
-                Ok(_) => {
-                    return result;
-                }
-                Err(_) => {
-                    // fail if we've taken too long, otherwise retry after a short delay
-                    if std::time::Instant::now() - start_time >= std::time::Duration::from_secs(3) {
-                        return result;
-                    }
-                }
-            }
-            Duration::QUANTUM.sleep();
-        }
     }
 }

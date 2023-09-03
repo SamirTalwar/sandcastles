@@ -8,6 +8,7 @@ pub mod supervisor;
 pub mod timing;
 pub mod wait;
 
+mod test_helpers;
 mod test_programs;
 mod test_services;
 
