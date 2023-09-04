@@ -100,6 +100,12 @@ impl Program {
 }
 
 impl RunningProgram {
+    #[cfg(test)]
+    pub(crate) fn is_running(&mut self) -> anyhow::Result<bool> {
+        let exit_code = self.process.try_wait()?;
+        Ok(exit_code.is_none())
+    }
+
     pub(crate) fn stop(&mut self, timeout: Duration) -> anyhow::Result<()> {
         let process_id = nix::unistd::Pid::from_raw(self.process.id().try_into()?);
         nix::sys::signal::kill(process_id, nix::sys::signal::Signal::SIGTERM)
@@ -131,15 +137,17 @@ mod tests {
         let mut running_program = program.start()?;
 
         Duration::QUANTUM.sleep();
-        let exit_code_before_stop = running_program.process.try_wait()?;
-        assert_eq!(exit_code_before_stop, None);
+        assert!(
+            running_program.is_running()?,
+            "The process stopped abruptly."
+        );
 
         running_program.stop(Duration::of(5, DurationUnit::Seconds))?;
 
-        let exit_code_after_stop = running_program.process.try_wait()?;
-        if exit_code_after_stop.is_none() {
-            panic!("Expected the process to have stopped.");
-        }
+        assert!(
+            !running_program.is_running()?,
+            "Expected the process to have stopped."
+        );
         Ok(())
     }
 
@@ -172,15 +180,17 @@ mod tests {
         let mut running_program = program.start()?;
 
         Duration::QUANTUM.sleep();
-        let exit_code_before_stop = running_program.process.try_wait()?;
-        assert_eq!(exit_code_before_stop, None);
+        assert!(
+            running_program.is_running()?,
+            "The process stopped abruptly."
+        );
 
         running_program.stop(Duration::of(1, DurationUnit::Seconds))?;
 
-        let exit_code_after_stop = running_program.process.try_wait()?;
-        if exit_code_after_stop.is_none() {
-            panic!("Expected the process to have stopped.");
-        }
+        assert!(
+            !running_program.is_running()?,
+            "Expected the process to have stopped."
+        );
         Ok(())
     }
 }
