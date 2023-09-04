@@ -17,7 +17,7 @@ if 'IN_NIX_SHELL' in $env {
   run 'check Rust version in Nix' {
     std assert equal (open rust-toolchain.toml | get toolchain.channel) (rustc --version | split row (char space) | $in.1)
   }
-  run 'nix build' { nix build --offline }
+  run 'nix build' { nix build }
 } else {
   print --stderr 'Skipping Nix checks.'
 }
