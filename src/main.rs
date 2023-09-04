@@ -54,7 +54,7 @@ fn main() -> anyhow::Result<()> {
             let daemon = Arc::new(Daemon::start_on_socket(socket_path)?);
             unsafe {
                 for signal in [signal::SIGINT, signal::SIGQUIT, signal::SIGTERM] {
-                    let daemon_for_signal = Arc::downgrade(&Arc::clone(&daemon));
+                    let daemon_for_signal = Arc::downgrade(&daemon);
                     signal_hook::low_level::register(signal, move || {
                         if let Some(d) = daemon_for_signal.upgrade() {
                             d.stop();
