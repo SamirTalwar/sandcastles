@@ -1,78 +1,80 @@
 use std::collections::BTreeMap;
+use std::ffi::{OsStr, OsString};
 use std::process::{Child, Command};
 use std::time::Instant;
 
 use anyhow::Context;
+use bstr::{ByteSlice, ByteVec};
 
 use crate::timing::Duration;
 
-#[derive(Debug, Clone)]
-pub struct Argument {
-    value: std::ffi::OsString,
-    rendered: String,
-}
-
-impl PartialEq for Argument {
-    fn eq(&self, other: &Self) -> bool {
-        self.value.eq(&other.value)
-    }
-}
-
-impl Eq for Argument {}
-
-impl PartialOrd for Argument {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.value.partial_cmp(&other.value)
-    }
-}
-
-impl Ord for Argument {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.value.cmp(&other.value)
-    }
-}
-
-impl std::hash::Hash for Argument {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.value.hash(state)
-    }
-}
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Argument(OsString);
 
 impl serde::Serialize for Argument {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.value.serialize(serializer)
+        // This actually adds an extra, pointless layer of escaping, but it's
+        // better than replacing unknown characters with \uFFFD.
+        serializer.serialize_str(
+            &<[u8]>::from_os_str(&self.0)
+                .expect("Could not encode the argument.")
+                .escape_bytes()
+                .collect::<String>(),
+        )
     }
 }
 
 impl<'de> serde::Deserialize<'de> for Argument {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        std::ffi::OsString::deserialize(deserializer).map(Self::new)
-    }
-}
-
-impl Argument {
-    pub fn new(into_value: impl Into<std::ffi::OsString>) -> Self {
-        let value = into_value.into();
-        let rendered = value.to_string_lossy().to_string();
-        Self { value, rendered }
-    }
-}
-
-impl<Value: Into<std::ffi::OsString>> From<Value> for Argument {
-    fn from(value: Value) -> Self {
-        Self::new(value)
+        // This reverses the extra layer of escaping above.
+        let result = String::deserialize(deserializer)?;
+        Ok(Self(
+            Vec::<u8>::unescape_bytes(result)
+                .into_os_string()
+                .expect("Could not decode the argument."),
+        ))
     }
 }
 
 impl AsRef<std::ffi::OsStr> for Argument {
     fn as_ref(&self) -> &std::ffi::OsStr {
-        &self.value
+        &self.0
     }
 }
 
-impl std::fmt::Display for Argument {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.rendered.fmt(f)
+impl From<&OsStr> for Argument {
+    fn from(value: &OsStr) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl From<OsString> for Argument {
+    fn from(value: OsString) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for Argument {
+    fn from(value: &str) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<String> for Argument {
+    fn from(value: String) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<&std::path::Path> for Argument {
+    fn from(value: &std::path::Path) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<std::path::PathBuf> for Argument {
+    fn from(value: std::path::PathBuf) -> Self {
+        Self(value.into())
     }
 }
 
@@ -124,6 +126,8 @@ impl RunningProgram {
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::prelude::OsStrExt;
+
     use crate::test_helpers::*;
     use crate::test_programs;
     use crate::timing::{Duration, DurationUnit};
@@ -190,6 +194,29 @@ mod tests {
         assert!(
             !running_program.is_running()?,
             "Expected the process to have stopped."
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_serializing_an_argument() -> anyhow::Result<()> {
+        let argument = Argument::from(OsStr::from_bytes(b"/path/to\x01/command"));
+
+        let serialized = serde_json::to_string(&argument)?;
+
+        assert_eq!(serialized, "\"/path/to\\\\x01/command\"");
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserializing_an_argument() -> anyhow::Result<()> {
+        let serialized = "\"wibble.\\\\xFF.wobble\"";
+
+        let deserialized: Argument = serde_json::from_str(serialized)?;
+
+        assert_eq!(
+            deserialized,
+            Argument::from(OsStr::from_bytes(b"wibble.\xFF.wobble"))
         );
         Ok(())
     }
