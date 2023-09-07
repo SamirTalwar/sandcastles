@@ -1,3 +1,28 @@
+//! This is a simple library used for JSON logging.
+//!
+//! Use as follows:
+//!
+//! ```ignore
+//! log!(Severity::Error, code = "OHNOITBROKE", error = err)
+//! ```
+//!
+//! Any value serializable by `serde` can be logged.
+//!
+//! If the name and value are the same, you can pass it by name:
+//!
+//! ```ignore
+//! log!(Severity::Info, request)
+//! ```
+//!
+//! There are helpers for the various severity levels:
+//!
+//! ```ignore
+//! warning!(code = "DUPLICATE", value = duplicate_value)
+//! ```
+//!
+//! Everything else is up to you.
+
+/// Severity levels, for logging.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
@@ -11,6 +36,11 @@ pub enum Severity {
     Fatal,
 }
 
+/// Log at TRACE severity.
+///
+/// ```ignore
+/// trace!(name = "value", ...)
+/// ```
 #[allow(unused_macros)]
 macro_rules! trace {
     ( $($tokens:tt)+ ) => {
@@ -18,6 +48,11 @@ macro_rules! trace {
     };
 }
 
+/// Log at DEBUG severity.
+///
+/// ```ignore
+/// debug!(name = "value", ...)
+/// ```
 #[allow(unused_macros)]
 macro_rules! debug {
     ( $($tokens:tt)+ ) => {
@@ -25,6 +60,11 @@ macro_rules! debug {
     };
 }
 
+/// LOG at INFO severity.
+///
+/// ```ignore
+/// info!(name = "value", ...)
+/// ```
 #[allow(unused_macros)]
 macro_rules! info {
     ( $($tokens:tt)+ ) => {
@@ -32,6 +72,11 @@ macro_rules! info {
     };
 }
 
+/// LOG at WARNING severity.
+///
+/// ```ignore
+/// warning!(name = "value", ...)
+/// ```
 #[allow(unused_macros)]
 macro_rules! warning {
     ( $($tokens:tt)+ ) => {
@@ -39,6 +84,11 @@ macro_rules! warning {
     };
 }
 
+/// LOG at ERROR severity.
+///
+/// ```ignore
+/// error!(name = "value", ...)
+/// ```
 #[allow(unused_macros)]
 macro_rules! error {
     ( $($tokens:tt)+ ) => {
@@ -46,6 +96,11 @@ macro_rules! error {
     };
 }
 
+/// LOG at FATAL severity.
+///
+/// ```ignore
+/// fatal!(name = "value", ...)
+/// ```
 #[allow(unused_macros)]
 macro_rules! fatal {
     ( $($tokens:tt)+ ) => {
@@ -53,6 +108,13 @@ macro_rules! fatal {
     };
 }
 
+/// Log the values given, along with the current time and given severity.
+///
+/// All values must be serializable with `serde`.
+///
+/// ```ignore
+/// log!(Severity::Debug, name = "value", ...)
+/// ```
 macro_rules! log {
     ( $($tokens:tt)+ ) => {
         $crate::log::log_explicitly!(
@@ -63,6 +125,12 @@ macro_rules! log {
     };
 }
 
+/// Internal; subject to change.
+///
+/// ```ignore
+/// log_explicitly!(stdout(), now(), Level::INFO, name = "value", ...)
+/// ```
+#[doc(hidden)]
 macro_rules! log_explicitly {
     ( $output: expr, $timestamp: expr, $severity: expr, $($rest:tt)+ ) => {{
         use serde::Serialize;
@@ -83,12 +151,19 @@ macro_rules! log_explicitly {
     }};
 }
 
+#[doc(hidden)]
 macro_rules! log_builder {
+    // Adds the name/value pair to the builder, and proceeds.
+    //
+    //     log_builder!(builder, name = "value", ...)
     ( $builder:ident, $name: ident = $value:expr, $($rest:tt)* ) => {
         $crate::log::log_builder!($builder, $name = $value);
         $crate::log::log_builder!($builder, $($rest)*);
     };
 
+    // Adds the name/value pair to the builder, and stops.
+    //
+    //     log_builder!(builder, name = "value")
     ( $builder:ident, $name: ident = $value:expr ) => {
         $builder.insert(
             stringify!($name).to_owned(),
@@ -96,11 +171,17 @@ macro_rules! log_builder {
         );
     };
 
+    // Adds the value to the builder, using its name, and proceeds.
+    //
+    //     log_builder!(builder, name, ...)
     ( $builder:ident, $name: ident, $($rest:tt)* ) => {
         $crate::log::log_builder!($builder, $name);
         $crate::log::log_builder!($builder, $($rest)*);
     };
 
+    // Adds the value to the builder, using its name, and stops.
+    //
+    //     log_builder!(builder, name)
     ( $builder:ident, $name: ident ) => {
         $builder.insert(
             stringify!($name).to_owned(),
@@ -108,6 +189,7 @@ macro_rules! log_builder {
         );
     };
 
+    // If the user leaves a trailing comma, this swallows it.
     ( $builder:ident, ) => {};
 }
 
