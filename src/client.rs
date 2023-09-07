@@ -27,12 +27,12 @@ impl Client {
     }
 
     fn send(&mut self, request: &Request) -> Result<(), anyhow::Error> {
-        log::debug!(request = request);
+        log::debug!(request);
         bincode::serialize_into(&mut self.socket, request)
             .context("Could not serialize the request")?;
         let response = bincode::deserialize_from(&mut self.socket)
             .context("Could not deserialize the response")?;
-        log::debug!(response = response);
+        log::debug!(response);
         match response {
             Response::Success => Ok(()),
             Response::Failure(message) => anyhow::bail!(message),

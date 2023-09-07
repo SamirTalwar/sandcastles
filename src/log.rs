@@ -64,33 +64,55 @@ macro_rules! log {
 }
 
 macro_rules! log_explicitly {
-    ( $output: expr, $timestamp: expr, $severity: expr, $($name: ident = $value: expr),+ $(,)* ) => {
-        {
-            use std::io::Write;
-            use serde::Serialize;
-            let mut values = serde_json::map::Map::new();
-            values.insert(
-                "timestamp".to_owned(),
-                serde_json::to_value($timestamp as chrono::DateTime<_>).unwrap(),
-            );
-            values.insert(
-                "severity".to_owned(),
-                serde_json::to_value($severity as $crate::log::Severity).unwrap(),
-            );
-            $(
-                values.insert(
-                    stringify!($name).to_owned(),
-                    serde_json::to_value(&$value).unwrap(),
-                );
-            )+
-            let mut serializer = serde_json::Serializer::new($output);
-            values.serialize(&mut serializer).unwrap();
-            writeln!(serializer.into_inner()).unwrap();
-        }
+    ( $output: expr, $timestamp: expr, $severity: expr, $($rest:tt)+ ) => {{
+        use serde::Serialize;
+        use std::io::Write;
+        let mut values = serde_json::map::Map::new();
+        values.insert(
+            "timestamp".to_owned(),
+            serde_json::to_value($timestamp as chrono::DateTime<_>).unwrap(),
+        );
+        values.insert(
+            "severity".to_owned(),
+            serde_json::to_value($severity as $crate::log::Severity).unwrap(),
+        );
+        $crate::log::log_builder!(values, $($rest)+);
+        let mut serializer = serde_json::Serializer::new($output);
+        values.serialize(&mut serializer).unwrap();
+        writeln!(serializer.into_inner()).unwrap();
+    }};
+}
+
+macro_rules! log_builder {
+    ( $builder:ident, $name: ident = $value:expr, $($rest:tt)* ) => {
+        $crate::log::log_builder!($builder, $name = $value);
+        $crate::log::log_builder!($builder, $($rest)*);
     };
+
+    ( $builder:ident, $name: ident = $value:expr ) => {
+        $builder.insert(
+            stringify!($name).to_owned(),
+            serde_json::to_value(&$value).unwrap(),
+        );
+    };
+
+    ( $builder:ident, $name: ident, $($rest:tt)* ) => {
+        $crate::log::log_builder!($builder, $name);
+        $crate::log::log_builder!($builder, $($rest)*);
+    };
+
+    ( $builder:ident, $name: ident ) => {
+        $builder.insert(
+            stringify!($name).to_owned(),
+            serde_json::to_value(&$name).unwrap(),
+        );
+    };
+
+    ( $builder:ident, ) => {};
 }
 
 pub(crate) use log;
+pub(crate) use log_builder;
 pub(crate) use log_explicitly;
 
 #[allow(unused_imports)]
@@ -124,7 +146,7 @@ mod tests {
                 Severity::Debug,
                 a = 1,
                 b = "two",
-                c = 3.0
+                c = 3.0,
             );
         })?;
 
@@ -165,13 +187,32 @@ mod tests {
                         name: "Carol".to_owned(),
                         age: 43
                     }
-                ]
+                ],
             );
         })?;
 
         assert_eq!(
             output,
             r#"{"timestamp":"2023-09-02T00:00:00Z","severity":"INFO","numbers":[[1,2],[3,4]],"dictionary":{"apple":"Apfel","banana":"Banane","carrot":"Rüebli"},"person":{"name":"Alice","age":21},"people":[{"name":"Bob","age":32},{"name":"Carol","age":43}]}"#.to_owned() + "\n"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_logging_by_name_only() -> anyhow::Result<()> {
+        let timestamp = chrono::DateTime::parse_from_rfc3339("2023-09-01T00:00:00Z")?;
+
+        let output = capture_output(|mut buffer| {
+            let x = vec![1, 2, 3];
+            let y = "hello";
+            log_explicitly!(&mut buffer, timestamp, Severity::Debug, x, y);
+        })?;
+
+        assert_eq!(
+            output,
+            r#"{"timestamp":"2023-09-01T00:00:00Z","severity":"DEBUG","x":[1,2,3],"y":"hello"}"#
+                .to_owned()
+                + "\n"
         );
         Ok(())
     }
