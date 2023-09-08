@@ -21,7 +21,7 @@
 //! ```
 //!
 //! You can log errors too. They also need to be serializable, but there is a
-//! helper method, `log()`, for `std::io::Error`:
+//! helper method, `log()`, for `std::io::Error` and a few other types:
 //!
 //! ```ignore
 //! error!(code = "OHNOITBROKE", error = err.log())
@@ -52,6 +52,31 @@ pub struct LoggableIoError {
     message: String,
 }
 
+impl Loggable for anyhow::Error {
+    type Serialized = LoggableAnyhowError;
+
+    fn log(&self) -> Self::Serialized {
+        LoggableAnyhowError {
+            message: self.to_string(),
+            causes: self.chain().map(|cause| cause.to_string()).collect(),
+        }
+    }
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct LoggableAnyhowError {
+    message: String,
+    causes: Vec<String>,
+}
+
+impl Loggable for bincode::ErrorKind {
+    type Serialized = String;
+
+    fn log(&self) -> Self::Serialized {
+        self.to_string()
+    }
+}
+
 /// Severity levels, for logging.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
@@ -74,7 +99,7 @@ pub enum Severity {
 #[allow(unused_macros)]
 macro_rules! trace {
     ( $($tokens:tt)+ ) => {
-        $crate::log::log!($crate::log::Severity::Trace, $($tokens)+);
+        $crate::log::log!($crate::log::Severity::Trace, $($tokens)+)
     };
 }
 
@@ -86,7 +111,7 @@ macro_rules! trace {
 #[allow(unused_macros)]
 macro_rules! debug {
     ( $($tokens:tt)+ ) => {
-        $crate::log::log!($crate::log::Severity::Debug, $($tokens)+);
+        $crate::log::log!($crate::log::Severity::Debug, $($tokens)+)
     };
 }
 
@@ -98,7 +123,7 @@ macro_rules! debug {
 #[allow(unused_macros)]
 macro_rules! info {
     ( $($tokens:tt)+ ) => {
-        $crate::log::log!($crate::log::Severity::Info, $($tokens)+);
+        $crate::log::log!($crate::log::Severity::Info, $($tokens)+)
     };
 }
 
@@ -110,7 +135,7 @@ macro_rules! info {
 #[allow(unused_macros)]
 macro_rules! warning {
     ( $($tokens:tt)+ ) => {
-        $crate::log::log!($crate::log::Severity::Warning, $($tokens)+);
+        $crate::log::log!($crate::log::Severity::Warning, $($tokens)+)
     };
 }
 
@@ -122,7 +147,7 @@ macro_rules! warning {
 #[allow(unused_macros)]
 macro_rules! error {
     ( $($tokens:tt)+ ) => {
-        $crate::log::log!($crate::log::Severity::Error, $($tokens)+);
+        $crate::log::log!($crate::log::Severity::Error, $($tokens)+)
     };
 }
 
@@ -134,7 +159,7 @@ macro_rules! error {
 #[allow(unused_macros)]
 macro_rules! fatal {
     ( $($tokens:tt)+ ) => {
-        $crate::log::log!($crate::log::Severity::Fatal, $($tokens)+);
+        $crate::log::log!($crate::log::Severity::Fatal, $($tokens)+)
     };
 }
 
@@ -151,7 +176,7 @@ macro_rules! log {
             std::io::stdout(),
             chrono::offset::Utc::now(),
             $($tokens)+
-        );
+        )
     };
 }
 
@@ -163,6 +188,8 @@ macro_rules! log {
 #[doc(hidden)]
 macro_rules! log_explicitly {
     ( $output: expr, $timestamp: expr, $severity: expr, $($rest:tt)+ ) => {{
+        #[allow(unused_imports)]
+        use $crate::log::Loggable;
         use serde::Serialize;
         use std::io::Write;
         let mut values = serde_json::map::Map::new();
@@ -188,7 +215,7 @@ macro_rules! log_builder {
     //     log_builder!(builder, name = "value", ...)
     ( $builder:ident, $name: ident = $value:expr, $($rest:tt)* ) => {
         $crate::log::log_builder!($builder, $name = $value);
-        $crate::log::log_builder!($builder, $($rest)*);
+        $crate::log::log_builder!($builder, $($rest)*)
     };
 
     // Adds the name/value pair to the builder, and stops.
@@ -206,7 +233,7 @@ macro_rules! log_builder {
     //     log_builder!(builder, name, ...)
     ( $builder:ident, $name: ident, $($rest:tt)* ) => {
         $crate::log::log_builder!($builder, $name);
-        $crate::log::log_builder!($builder, $($rest)*);
+        $crate::log::log_builder!($builder, $($rest)*)
     };
 
     // Adds the value to the builder, using its name, and stops.

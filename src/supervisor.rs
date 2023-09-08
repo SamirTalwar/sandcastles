@@ -20,7 +20,7 @@ impl Supervisor {
         Self(Arc::new(Mutex::new(RunningServices::new())))
     }
 
-    pub fn start(&self, instruction: Start) -> anyhow::Result<()> {
+    pub fn start(&self, instruction: &Start) -> anyhow::Result<()> {
         let running = instruction
             .service
             .start()
@@ -84,7 +84,7 @@ mod tests {
         let output_file = output_directory.path().join("timestamp.txt");
 
         let supervisor = Supervisor::new();
-        supervisor.start(Start {
+        supervisor.start(&Start {
             service: test_services::file_watch(&output_file, vec!["echo".into(), "output".into()]),
             wait: WaitFor::None,
         })?;
@@ -99,7 +99,7 @@ mod tests {
     fn test_starts_a_single_service_and_waits_for_a_port() -> anyhow::Result<()> {
         let service_port = Port::next_available()?;
         let supervisor = Supervisor::new();
-        supervisor.start(Start {
+        supervisor.start(&Start {
             service: test_services::http_hello_world(service_port),
             wait: WaitFor::Port(service_port),
         })?;
@@ -117,7 +117,7 @@ mod tests {
 
         {
             let supervisor = Supervisor::new();
-            supervisor.start(Start {
+            supervisor.start(&Start {
                 service: test_services::http_hello_world(service_port),
                 wait: WaitFor::Port(service_port),
             })?;

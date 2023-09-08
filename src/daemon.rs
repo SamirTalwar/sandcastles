@@ -14,6 +14,7 @@ use anyhow::Context;
 
 use crate::awaiter::Awaiter;
 use crate::communication::{Request, Response};
+use crate::log;
 use crate::supervisor::Supervisor;
 use crate::timing::Duration;
 
@@ -93,12 +94,12 @@ impl Drop for Daemon {
         self.stop();
         self.wait();
         fs::remove_file(&self.socket_path)
-            .unwrap_or_else(|err| eprintln!("An error occurred during shutdown: {}", err));
+            .unwrap_or_else(|err| log::error!(event = "SHUTDOWN", error = err.log()));
     }
 }
 
 fn start(supervisor: &Supervisor, listener: UnixListener, internal_stop_signal: &AtomicBool) {
-    eprintln!("Starting the daemon.");
+    log::debug!(event = "STARTED");
     let (stop_sender, stop_receiver) = mpsc::channel();
     for incoming in listener.incoming() {
         match incoming {
@@ -106,15 +107,17 @@ fn start(supervisor: &Supervisor, listener: UnixListener, internal_stop_signal: 
                 let supervisor_for_connection = supervisor.clone();
                 let stop_sender_for_connection = stop_sender.clone();
                 thread::spawn(move || {
-                    stream.set_nonblocking(false).unwrap_or_else(|err| {
-                        eprintln!("Could not configure the server socket: {}", err)
-                    });
-                    handle_connection(
-                        stream,
-                        &supervisor_for_connection,
-                        stop_sender_for_connection,
-                    )
-                    .unwrap_or_else(|err| eprintln!("Request error: {}", err));
+                    stream
+                        .set_nonblocking(false)
+                        .context("Could not set configure the stream.")
+                        .and_then(|_| {
+                            handle_connection(
+                                stream,
+                                &supervisor_for_connection,
+                                stop_sender_for_connection,
+                            )
+                        })
+                        .unwrap_or_else(|err| log::error!(event = "ACCEPT", error = err.log()))
                 });
             }
             Err(err) => match err.kind() {
@@ -122,7 +125,7 @@ fn start(supervisor: &Supervisor, listener: UnixListener, internal_stop_signal: 
                     Duration::QUANTUM.sleep();
                 }
                 _ => {
-                    eprintln!("Connection failed: {}", err);
+                    log::fatal!(event = "ACCEPT", error = err.log());
                     break;
                 }
             },
@@ -131,7 +134,7 @@ fn start(supervisor: &Supervisor, listener: UnixListener, internal_stop_signal: 
             break;
         }
     }
-    eprintln!("The daemon has stopped.");
+    log::debug!(event = "STOPPED");
 }
 
 fn handle_connection(
@@ -141,16 +144,21 @@ fn handle_connection(
 ) -> anyhow::Result<()> {
     let request =
         bincode::deserialize_from(&mut stream).context("Failed to deserialize the request")?;
+    log::debug!(event = "HANDLE", request);
     match request {
-        Request::Start(instruction) => match supervisor.start(instruction) {
-            Ok(()) => bincode::serialize_into(&mut stream, &Response::Success)
-                .context("Failed to serialize the response"),
-            Err(err) => {
-                eprintln!("Failed to start a program: {}", err);
-                bincode::serialize_into(&mut stream, &Response::Failure(err.to_string()))
-                    .context("Failed to serialize the response")
-            }
-        },
+        Request::Start(instruction) => {
+            log::info!(event = "START", instruction);
+            let response = match supervisor.start(&instruction) {
+                Ok(()) => Response::Success,
+                Err(err) => {
+                    log::warning!(event = "START", instruction, error = err.log());
+                    Response::Failure(err.to_string())
+                }
+            };
+            log::debug!(event = "HANDLE", response);
+            bincode::serialize_into(&mut stream, &response)
+                .context("Failed to serialize the response")
+        }
         Request::Shutdown => {
             stop_sender
                 .send(stream)
@@ -166,20 +174,31 @@ fn stop_requested(
     external_stop_receiver: &mpsc::Receiver<UnixStream>,
 ) -> bool {
     if internal_stop_signal.load(Ordering::Relaxed) {
-        supervisor.stop_all().unwrap(); // stop everything before responding
+        log::debug!(event = "SHUTDOWN");
+        // stop everything before responding
+        supervisor
+            .stop_all()
+            .unwrap_or_else(|err| log::error!(event = "SHUTDOWN", error = err.log()));
         return true;
     }
     match external_stop_receiver.try_recv() {
         Ok(mut stream) => {
-            supervisor.stop_all().unwrap(); // stop everything before responding
-            bincode::serialize_into(&mut stream, &Response::Success).unwrap_or_else(|err| {
-                eprintln!("Failed to serialize the shutdown response: {}", err)
+            log::debug!(event = "SHUTDOWN");
+            // stop everything before responding
+            supervisor
+                .stop_all()
+                .unwrap_or_else(|err| log::error!(event = "SHUTDOWN", error = err.log()));
+
+            let response = Response::Success;
+            log::debug!(event = "HANDLE", response);
+            bincode::serialize_into(&mut stream, &response).unwrap_or_else(|err| {
+                log::error!(event = "ACCEPT", error = err.log());
             });
             true
         }
         Err(mpsc::TryRecvError::Empty) => false,
         Err(mpsc::TryRecvError::Disconnected) => {
-            eprintln!("The stop signal has been disconnected. Aborting.");
+            log::fatal!(event = "DISCONNECT");
             true
         }
     }
