@@ -10,10 +10,10 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 
-use anyhow::Context;
-
 use crate::awaiter::Awaiter;
 use crate::communication::{Request, Response};
+use crate::error::DaemonError;
+use crate::error::DaemonResult;
 use crate::log;
 use crate::supervisor::Supervisor;
 use crate::timing::Duration;
@@ -30,16 +30,16 @@ pub struct Daemon {
 }
 
 impl Daemon {
-    pub fn start_on_socket(socket_path: PathBuf) -> anyhow::Result<Self> {
+    pub fn start_on_socket(socket_path: PathBuf) -> DaemonResult<Self> {
         Self::start(socket_path, Supervisor::new())
     }
 
-    pub fn start(socket_path: PathBuf, supervisor: Supervisor) -> anyhow::Result<Self> {
-        let listener =
-            UnixListener::bind(&socket_path).context("Could not create the daemon socket")?;
+    pub fn start(socket_path: PathBuf, supervisor: Supervisor) -> DaemonResult<Self> {
+        let listener = UnixListener::bind(&socket_path)
+            .map_err(|error| DaemonError::SocketCreationError(error.into()))?;
         listener
             .set_nonblocking(true)
-            .context("Could not configure the daemon socket")?;
+            .map_err(|error| DaemonError::SocketConfigurationError(error.into()))?;
         let stop_signal = Arc::new(AtomicBool::new(false));
         let stop_signal_for_start = Arc::clone(&stop_signal);
         let thread_handle = thread::spawn(move || {
@@ -94,7 +94,7 @@ impl Drop for Daemon {
         self.stop();
         self.wait();
         fs::remove_file(&self.socket_path)
-            .unwrap_or_else(|err| log::error!(event = "SHUTDOWN", error = err.log()));
+            .unwrap_or_else(|error| log::error!(event = "SHUTDOWN", error = error.log()));
     }
 }
 
@@ -109,7 +109,7 @@ fn start(supervisor: &Supervisor, listener: UnixListener, internal_stop_signal: 
                 thread::spawn(move || {
                     stream
                         .set_nonblocking(false)
-                        .context("Could not set configure the stream.")
+                        .map_err(|error| DaemonError::SocketConfigurationError(error.into()))
                         .and_then(|_| {
                             handle_connection(
                                 stream,
@@ -117,15 +117,15 @@ fn start(supervisor: &Supervisor, listener: UnixListener, internal_stop_signal: 
                                 stop_sender_for_connection,
                             )
                         })
-                        .unwrap_or_else(|err| log::error!(event = "ACCEPT", error = err.log()))
+                        .unwrap_or_else(|error| log::error!(event = "ACCEPT", error))
                 });
             }
-            Err(err) => match err.kind() {
+            Err(error) => match error.kind() {
                 io::ErrorKind::WouldBlock => {
                     Duration::QUANTUM.sleep();
                 }
                 _ => {
-                    log::fatal!(event = "ACCEPT", error = err.log());
+                    log::fatal!(event = "ACCEPT", error = error.log());
                     break;
                 }
             },
@@ -141,30 +141,27 @@ fn handle_connection(
     mut stream: UnixStream,
     supervisor: &Supervisor,
     stop_sender: mpsc::Sender<UnixStream>,
-) -> anyhow::Result<()> {
-    let request =
-        bincode::deserialize_from(&mut stream).context("Failed to deserialize the request")?;
+) -> DaemonResult<()> {
+    let request = bincode::deserialize_from(&mut stream)
+        .map_err(|err| DaemonError::RequestDeserializationError(*err))?;
     log::debug!(event = "HANDLE", request);
     match request {
         Request::Start(instruction) => {
             log::info!(event = "START", instruction);
             let response = match supervisor.start(&instruction) {
                 Ok(()) => Response::Success,
-                Err(err) => {
-                    log::warning!(event = "START", instruction, error = err.log());
-                    Response::Failure(err.to_string())
+                Err(error) => {
+                    log::warning!(event = "START", instruction, error = error.log());
+                    Response::Failure(error.to_string())
                 }
             };
             log::debug!(event = "HANDLE", response);
             bincode::serialize_into(&mut stream, &response)
-                .context("Failed to serialize the response")
+                .map_err(|err| DaemonError::ResponseSerializationError(*err))
         }
-        Request::Shutdown => {
-            stop_sender
-                .send(stream)
-                .context("Failed to shut down the daemon")?;
-            Ok(())
-        }
+        Request::Shutdown => stop_sender
+            .send(stream)
+            .map_err(DaemonError::ShutdownRequestError),
     }
 }
 
@@ -178,7 +175,7 @@ fn stop_requested(
         // stop everything before responding
         supervisor
             .stop_all()
-            .unwrap_or_else(|err| log::error!(event = "SHUTDOWN", error = err.log()));
+            .unwrap_or_else(|error| log::error!(event = "SHUTDOWN", error = error.log()));
         return true;
     }
     match external_stop_receiver.try_recv() {
@@ -187,12 +184,12 @@ fn stop_requested(
             // stop everything before responding
             supervisor
                 .stop_all()
-                .unwrap_or_else(|err| log::error!(event = "SHUTDOWN", error = err.log()));
+                .unwrap_or_else(|error| log::error!(event = "SHUTDOWN", error = error.log()));
 
             let response = Response::Success;
             log::debug!(event = "HANDLE", response);
-            bincode::serialize_into(&mut stream, &response).unwrap_or_else(|err| {
-                log::error!(event = "ACCEPT", error = err.log());
+            bincode::serialize_into(&mut stream, &response).unwrap_or_else(|error| {
+                log::error!(event = "ACCEPT", error = error.log());
             });
             true
         }

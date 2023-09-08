@@ -58,6 +58,18 @@ impl From<&std::io::Error> for LoggableIoError {
     }
 }
 
+impl From<std::io::Error> for LoggableIoError {
+    fn from(value: std::io::Error) -> Self {
+        (&value).into()
+    }
+}
+
+impl std::fmt::Display for LoggableIoError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}", self.kind, self.message)
+    }
+}
+
 impl Loggable for anyhow::Error {
     type Serialized = LoggableAnyhowError;
 
@@ -78,6 +90,12 @@ impl From<&anyhow::Error> for LoggableAnyhowError {
             message: value.to_string(),
             causes: value.chain().map(|cause| cause.to_string()).collect(),
         }
+    }
+}
+
+impl From<anyhow::Error> for LoggableAnyhowError {
+    fn from(value: anyhow::Error) -> Self {
+        (&value).into()
     }
 }
 

@@ -2,6 +2,7 @@ pub mod awaiter;
 pub mod client;
 pub mod communication;
 pub mod daemon;
+pub mod error;
 pub mod ports;
 pub mod services;
 pub mod supervisor;
