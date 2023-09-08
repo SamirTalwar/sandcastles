@@ -3,7 +3,7 @@
 //! Use as follows:
 //!
 //! ```ignore
-//! log!(Severity::Error, code = "OHNOITBROKE", error = err)
+//! log!(Severity::Debug, event = "SERVICE_STARTED", port = 8080)
 //! ```
 //!
 //! Any value serializable by `serde` can be logged.
@@ -20,7 +20,37 @@
 //! warning!(code = "DUPLICATE", value = duplicate_value)
 //! ```
 //!
+//! You can log errors too. They also need to be serializable, but there is a
+//! helper method, `log()`, for `std::io::Error`:
+//!
+//! ```ignore
+//! error!(code = "OHNOITBROKE", error = err.log())
+//! ```
+//!
 //! Everything else is up to you.
+
+pub trait Loggable {
+    type Serialized;
+
+    fn log(&self) -> Self::Serialized;
+}
+
+impl Loggable for std::io::Error {
+    type Serialized = LoggableIoError;
+
+    fn log(&self) -> Self::Serialized {
+        LoggableIoError {
+            kind: format!("{:?}", self.kind()),
+            message: self.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct LoggableIoError {
+    kind: String,
+    message: String,
+}
 
 /// Severity levels, for logging.
 #[derive(
@@ -282,17 +312,56 @@ mod tests {
 
     #[test]
     fn test_logging_by_name_only() -> anyhow::Result<()> {
-        let timestamp = chrono::DateTime::parse_from_rfc3339("2023-09-01T00:00:00Z")?;
+        let timestamp = chrono::DateTime::parse_from_rfc3339("2023-09-03T00:00:00Z")?;
 
         let output = capture_output(|mut buffer| {
             let x = vec![1, 2, 3];
             let y = "hello";
-            log_explicitly!(&mut buffer, timestamp, Severity::Debug, x, y);
+            log_explicitly!(&mut buffer, timestamp, Severity::Warning, x, y);
         })?;
 
         assert_eq!(
             output,
-            r#"{"timestamp":"2023-09-01T00:00:00Z","severity":"DEBUG","x":[1,2,3],"y":"hello"}"#
+            r#"{"timestamp":"2023-09-03T00:00:00Z","severity":"WARNING","x":[1,2,3],"y":"hello"}"#
+                .to_owned()
+                + "\n"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_logging_errors() -> anyhow::Result<()> {
+        let timestamp = chrono::DateTime::parse_from_rfc3339("2023-09-04T00:00:00Z")?;
+
+        let output = capture_output(|mut buffer| {
+            let error = Whoops {
+                code: "WHOOPS".to_owned(),
+                message: "Uh oh.".to_owned(),
+            };
+            log_explicitly!(&mut buffer, timestamp, Severity::Error, error);
+        })?;
+
+        assert_eq!(
+            output,
+            r#"{"timestamp":"2023-09-04T00:00:00Z","severity":"ERROR","error":{"code":"WHOOPS","message":"Uh oh."}}"#
+                .to_owned()
+                + "\n"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_logging_io_errors() -> anyhow::Result<()> {
+        let timestamp = chrono::DateTime::parse_from_rfc3339("2023-09-05T00:00:00Z")?;
+
+        let output = capture_output(|mut buffer| {
+            let error = std::io::Error::new(std::io::ErrorKind::TimedOut, "it took too long");
+            log_explicitly!(&mut buffer, timestamp, Severity::Error, error = error.log());
+        })?;
+
+        assert_eq!(
+            output,
+            r#"{"timestamp":"2023-09-05T00:00:00Z","severity":"ERROR","error":{"kind":"TimedOut","message":"it took too long"}}"#
                 .to_owned()
                 + "\n"
         );
@@ -311,4 +380,18 @@ mod tests {
         name: String,
         age: u8,
     }
+
+    #[derive(Debug, serde::Serialize)]
+    struct Whoops {
+        code: String,
+        message: String,
+    }
+
+    impl std::fmt::Display for Whoops {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "Whoops [{}]: {}", self.code, self.message)
+        }
+    }
+
+    impl std::error::Error for Whoops {}
 }
