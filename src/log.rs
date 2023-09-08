@@ -39,10 +39,7 @@ impl Loggable for std::io::Error {
     type Serialized = LoggableIoError;
 
     fn log(&self) -> Self::Serialized {
-        LoggableIoError {
-            kind: format!("{:?}", self.kind()),
-            message: self.to_string(),
-        }
+        self.into()
     }
 }
 
@@ -52,14 +49,20 @@ pub struct LoggableIoError {
     message: String,
 }
 
+impl From<&std::io::Error> for LoggableIoError {
+    fn from(value: &std::io::Error) -> Self {
+        Self {
+            kind: format!("{:?}", value.kind()),
+            message: value.to_string(),
+        }
+    }
+}
+
 impl Loggable for anyhow::Error {
     type Serialized = LoggableAnyhowError;
 
     fn log(&self) -> Self::Serialized {
-        LoggableAnyhowError {
-            message: self.to_string(),
-            causes: self.chain().map(|cause| cause.to_string()).collect(),
-        }
+        self.into()
     }
 }
 
@@ -67,6 +70,15 @@ impl Loggable for anyhow::Error {
 pub struct LoggableAnyhowError {
     message: String,
     causes: Vec<String>,
+}
+
+impl From<&anyhow::Error> for LoggableAnyhowError {
+    fn from(value: &anyhow::Error) -> Self {
+        Self {
+            message: value.to_string(),
+            causes: value.chain().map(|cause| cause.to_string()).collect(),
+        }
+    }
 }
 
 impl Loggable for bincode::ErrorKind {
