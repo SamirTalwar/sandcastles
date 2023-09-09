@@ -11,9 +11,8 @@ use std::sync::Mutex;
 use std::thread;
 
 use crate::awaiter::Awaiter;
-use crate::communication::{Request, Response};
-use crate::error::DaemonError;
-use crate::error::DaemonResult;
+use crate::communication::{Request, Response, Ship};
+use crate::error::{DaemonError, DaemonResult};
 use crate::log;
 use crate::supervisor::Supervisor;
 use crate::timing::Duration;
@@ -142,8 +141,7 @@ fn handle_connection(
     supervisor: &Supervisor,
     stop_sender: mpsc::Sender<UnixStream>,
 ) -> DaemonResult<()> {
-    let request = bincode::deserialize_from(&mut stream)
-        .map_err(|err| DaemonError::RequestDeserializationError(err.to_string()))?;
+    let request = Request::read_from(&mut stream).map_err(DaemonError::CommunicationError)?;
     log::debug!(event = "HANDLE", request);
     match request {
         Request::Start(instruction) => {
@@ -156,8 +154,9 @@ fn handle_connection(
                 }
             };
             log::debug!(event = "HANDLE", response);
-            bincode::serialize_into(&mut stream, &response)
-                .map_err(|err| DaemonError::ResponseSerializationError(err.to_string()))
+            response
+                .write_to(&mut stream)
+                .map_err(DaemonError::CommunicationError)
         }
         Request::Shutdown => stop_sender
             .send(stream)
@@ -188,8 +187,8 @@ fn stop_requested(
 
             let response = Response::Success;
             log::debug!(event = "HANDLE", response);
-            bincode::serialize_into(&mut stream, &response).unwrap_or_else(|error| {
-                log::error!(event = "ACCEPT", error = error.to_string());
+            response.write_to(&mut stream).unwrap_or_else(|error| {
+                log::error!(event = "ACCEPT", error);
             });
             true
         }

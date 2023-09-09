@@ -9,8 +9,7 @@ pub type ClientResult<A> = std::result::Result<A, ClientError>;
 #[serde(tag = "code")]
 pub enum ClientError {
     SocketConnectionError(LoggableIoError),
-    RequestSerializationError(String),
-    ResponseDeserializationError(String),
+    CommunicationError(CommunicationError),
     DaemonError(DaemonError),
 }
 
@@ -18,12 +17,7 @@ impl Display for ClientError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::SocketConnectionError(inner) => write!(f, "socket connection error: {}", inner),
-            Self::RequestSerializationError(inner) => {
-                write!(f, "request serialization error: {}", inner)
-            }
-            Self::ResponseDeserializationError(inner) => {
-                write!(f, "response deserialization error: {}", inner)
-            }
+            Self::CommunicationError(inner) => write!(f, "{}", inner),
             Self::DaemonError(inner) => {
                 write!(f, "daemon error: {}", inner)
             }
@@ -40,8 +34,7 @@ pub type DaemonResult<A> = std::result::Result<A, DaemonError>;
 pub enum DaemonError {
     SocketCreationError(LoggableIoError),
     SocketConfigurationError(LoggableIoError),
-    RequestDeserializationError(String),
-    ResponseSerializationError(String),
+    CommunicationError(CommunicationError),
     ShutdownRequestError,
     StartProcessError(LoggableIoError),
     CheckProcessError(LoggableIoError),
@@ -60,12 +53,7 @@ impl Display for DaemonError {
             Self::SocketConfigurationError(inner) => {
                 write!(f, "socket configuration error: {}", inner)
             }
-            Self::RequestDeserializationError(inner) => {
-                write!(f, "request deserialization error: {}", inner)
-            }
-            Self::ResponseSerializationError(inner) => {
-                write!(f, "response serialization error: {}", inner)
-            }
+            Self::CommunicationError(inner) => write!(f, "{}", inner),
             Self::ShutdownRequestError => write!(f, "shutdown request error"),
             Self::StartProcessError(inner) => write!(f, "start process error: {}", inner),
             Self::CheckProcessError(inner) => write!(f, "check process error: {}", inner),
@@ -78,3 +66,27 @@ impl Display for DaemonError {
 }
 
 impl Error for DaemonError {}
+
+pub type CommunicationResult<A> = Result<A, CommunicationError>;
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "code")]
+pub enum CommunicationError {
+    SerializationError(String),
+    DeserializationError(String),
+}
+
+impl Display for CommunicationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SerializationError(inner) => {
+                write!(f, "serialization error: {}", inner)
+            }
+            Self::DeserializationError(inner) => {
+                write!(f, "deserialization error: {}", inner)
+            }
+        }
+    }
+}
+
+impl Error for CommunicationError {}

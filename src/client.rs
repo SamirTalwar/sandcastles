@@ -27,10 +27,11 @@ impl Client {
 
     fn send(&mut self, request: &Request) -> ClientResult<()> {
         log::debug!(request);
-        bincode::serialize_into(&mut self.socket, request)
-            .map_err(|error| ClientError::RequestSerializationError(error.to_string()))?;
-        let response = bincode::deserialize_from(&mut self.socket)
-            .map_err(|error| ClientError::ResponseDeserializationError(error.to_string()))?;
+        request
+            .write_to(&mut self.socket)
+            .map_err(ClientError::CommunicationError)?;
+        let response =
+            Response::read_from(&mut self.socket).map_err(ClientError::CommunicationError)?;
         log::debug!(response);
         match response {
             Response::Success => Ok(()),

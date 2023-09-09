@@ -1,4 +1,6 @@
-use crate::error::DaemonError;
+use std::io;
+
+use crate::error::{CommunicationError, CommunicationResult, DaemonError};
 use crate::services::Service;
 use crate::wait::WaitFor;
 
@@ -8,14 +10,40 @@ pub(crate) enum Request {
     Shutdown,
 }
 
+impl Ship for Request {}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum Response {
     Success,
     Failure(DaemonError),
 }
 
+impl Ship for Response {}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Start {
     pub service: Service,
     pub wait: WaitFor,
+}
+
+pub(crate) trait Ship: serde::Serialize + for<'de> serde::Deserialize<'de> + Sized {
+    fn read_from(reader: impl io::Read) -> CommunicationResult<Self> {
+        bincode::deserialize_from(reader)
+            .map_err(|error| CommunicationError::DeserializationError(error.to_string()))
+    }
+
+    fn deserialize(buffer: &[u8]) -> CommunicationResult<Self> {
+        Self::read_from(buffer)
+    }
+
+    fn write_to(&self, writer: impl io::Write) -> CommunicationResult<()> {
+        bincode::serialize_into(writer, self)
+            .map_err(|error| CommunicationError::SerializationError(error.to_string()))
+    }
+
+    fn serialize(&self) -> CommunicationResult<Vec<u8>> {
+        let mut buffer = Vec::new();
+        self.write_to(&mut buffer)?;
+        Ok(buffer)
+    }
 }
