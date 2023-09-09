@@ -1,8 +1,7 @@
 use std::sync::{Arc, Mutex};
 
-use anyhow::Context;
-
 use crate::communication::Start;
+use crate::error::DaemonResult;
 use crate::services::*;
 use crate::timing::Duration;
 
@@ -20,23 +19,16 @@ impl Supervisor {
         Self(Arc::new(Mutex::new(RunningServices::new())))
     }
 
-    pub fn start(&self, instruction: &Start) -> anyhow::Result<()> {
-        let running = instruction
-            .service
-            .start()
-            .context("Failed to start a service")?;
+    pub fn start(&self, instruction: &Start) -> DaemonResult<()> {
+        let running = instruction.service.start()?;
         let mut inner = self.0.lock().unwrap();
         inner.add(running);
         instruction.wait.block_until_ready(Duration::FOREVER)?; // we need to pick a global timeout here
         Ok(())
     }
 
-    pub fn stop_all(&self) -> anyhow::Result<()> {
-        self.0
-            .lock()
-            .unwrap()
-            .stop_all()
-            .context("Failed to stop running services")
+    pub fn stop_all(&self) -> DaemonResult<()> {
+        self.0.lock().unwrap().stop_all()
     }
 }
 
@@ -51,13 +43,13 @@ impl RunningServices {
         self.0.push(service);
     }
 
-    fn stop_all(&mut self) -> anyhow::Result<()> {
+    fn stop_all(&mut self) -> DaemonResult<()> {
         self.0
             .drain(..)
             .map(|mut service| service.stop(Duration::STOP_TIMEOUT))
-            .collect::<Vec<anyhow::Result<()>>>()
+            .collect::<Vec<DaemonResult<()>>>()
             .into_iter()
-            .collect::<anyhow::Result<()>>()
+            .collect::<DaemonResult<()>>()
     }
 }
 

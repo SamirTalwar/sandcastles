@@ -70,35 +70,6 @@ impl std::fmt::Display for LoggableIoError {
     }
 }
 
-impl Loggable for anyhow::Error {
-    type Serialized = LoggableAnyhowError;
-
-    fn log(&self) -> Self::Serialized {
-        self.into()
-    }
-}
-
-#[derive(Debug, serde::Serialize)]
-pub struct LoggableAnyhowError {
-    message: String,
-    causes: Vec<String>,
-}
-
-impl From<&anyhow::Error> for LoggableAnyhowError {
-    fn from(value: &anyhow::Error) -> Self {
-        Self {
-            message: value.to_string(),
-            causes: value.chain().map(|cause| cause.to_string()).collect(),
-        }
-    }
-}
-
-impl From<anyhow::Error> for LoggableAnyhowError {
-    fn from(value: anyhow::Error) -> Self {
-        (&value).into()
-    }
-}
-
 impl Loggable for bincode::ErrorKind {
     type Serialized = String;
 

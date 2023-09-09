@@ -3,9 +3,9 @@ use std::ffi::{OsStr, OsString};
 use std::process::{Child, Command};
 use std::time::Instant;
 
-use anyhow::Context;
 use bstr::{ByteSlice, ByteVec};
 
+use crate::error::{DaemonError, DaemonResult};
 use crate::timing::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -92,31 +92,48 @@ pub struct RunningProgram {
 }
 
 impl Program {
-    pub(crate) fn start(&self) -> anyhow::Result<RunningProgram> {
+    pub(crate) fn start(&self) -> DaemonResult<RunningProgram> {
         let process = Command::new(&self.command)
             .args(&self.arguments)
             .envs(&self.environment)
-            .spawn()?;
+            .spawn()
+            .map_err(|error| DaemonError::StartProcessError(error.into()))?;
         Ok(RunningProgram { process })
     }
 }
 
 impl RunningProgram {
     #[cfg(test)]
-    pub(crate) fn is_running(&mut self) -> anyhow::Result<bool> {
-        let exit_code = self.process.try_wait()?;
+    pub(crate) fn is_running(&mut self) -> DaemonResult<bool> {
+        let exit_code = self
+            .process
+            .try_wait()
+            .map_err(|error| DaemonError::CheckProcessError(error.into()))?;
         Ok(exit_code.is_none())
     }
 
-    pub(crate) fn stop(&mut self, timeout: Duration) -> anyhow::Result<()> {
-        let process_id = nix::unistd::Pid::from_raw(self.process.id().try_into()?);
-        nix::sys::signal::kill(process_id, nix::sys::signal::Signal::SIGTERM)
-            .context(format!("Failed to stop the process with ID {}", process_id))?;
+    pub(crate) fn stop(&mut self, timeout: Duration) -> DaemonResult<()> {
+        let unwrapped_process_id = self.process.id();
+        let process_id = nix::unistd::Pid::from_raw(
+            unwrapped_process_id
+                .try_into()
+                .expect("Could not convert a process ID."),
+        );
+        nix::sys::signal::kill(process_id, nix::sys::signal::Signal::SIGTERM).map_err(|error| {
+            DaemonError::StopProcessError {
+                process_id: unwrapped_process_id,
+                inner: std::io::Error::from_raw_os_error(error as i32).into(),
+            }
+        })?;
         let sigterm_time = Instant::now();
         while !matches!(self.process.try_wait(), Ok(Some(_))) {
             if Instant::now() - sigterm_time > timeout.into() {
-                nix::sys::signal::kill(process_id, nix::sys::signal::Signal::SIGKILL)
-                    .context(format!("Failed to kill the process with ID {}", process_id))?;
+                nix::sys::signal::kill(process_id, nix::sys::signal::Signal::SIGKILL).map_err(
+                    |error| DaemonError::StopProcessError {
+                        process_id: unwrapped_process_id,
+                        inner: std::io::Error::from_raw_os_error(error as i32).into(),
+                    },
+                )?;
             }
             Duration::QUANTUM.sleep();
         }
@@ -136,7 +153,7 @@ mod tests {
 
     #[test]
     #[ntest::timeout(2000)]
-    fn test_starting_and_stopping() -> anyhow::Result<()> {
+    fn test_starting_and_stopping() -> DaemonResult<()> {
         let program = test_programs::waits_for_termination();
         let mut running_program = program.start()?;
 

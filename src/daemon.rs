@@ -151,7 +151,7 @@ fn handle_connection(
             let response = match supervisor.start(&instruction) {
                 Ok(()) => Response::Success,
                 Err(error) => {
-                    log::warning!(event = "START", instruction, error = error.log());
+                    log::warning!(event = "START", instruction, error);
                     Response::Failure(error.to_string())
                 }
             };
@@ -175,7 +175,7 @@ fn stop_requested(
         // stop everything before responding
         supervisor
             .stop_all()
-            .unwrap_or_else(|error| log::error!(event = "SHUTDOWN", error = error.log()));
+            .unwrap_or_else(|error| log::error!(event = "SHUTDOWN", error));
         return true;
     }
     match external_stop_receiver.try_recv() {
@@ -184,7 +184,7 @@ fn stop_requested(
             // stop everything before responding
             supervisor
                 .stop_all()
-                .unwrap_or_else(|error| log::error!(event = "SHUTDOWN", error = error.log()));
+                .unwrap_or_else(|error| log::error!(event = "SHUTDOWN", error));
 
             let response = Response::Success;
             log::debug!(event = "HANDLE", response);

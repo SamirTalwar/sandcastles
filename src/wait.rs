@@ -1,9 +1,10 @@
 use std::time::Instant;
 
+use crate::error::{DaemonError, DaemonResult};
 use crate::ports::Port;
 use crate::timing::Duration;
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum WaitFor {
     None,
     Time(Duration),
@@ -11,12 +12,12 @@ pub enum WaitFor {
 }
 
 impl WaitFor {
-    pub(crate) fn block_until_ready(&self, timeout: Duration) -> anyhow::Result<()> {
+    pub(crate) fn block_until_ready(&self, timeout: Duration) -> DaemonResult<()> {
         match self {
             Self::None => Ok(()),
             Self::Time(duration) => {
                 if *duration >= timeout {
-                    anyhow::bail!("Timed out waiting for {:?}.", duration);
+                    return Err(DaemonError::TimeOut(self.clone()));
                 }
                 duration.sleep();
                 Ok(())
@@ -26,11 +27,21 @@ impl WaitFor {
                 while port.is_available() {
                     Duration::QUANTUM.sleep();
                     if Instant::now() - start_time > timeout.into() {
-                        anyhow::bail!("Timed out waiting for port {}.", port);
+                        return Err(DaemonError::TimeOut(self.clone()));
                     }
                 }
                 Ok(())
             }
+        }
+    }
+}
+
+impl std::fmt::Display for WaitFor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WaitFor::None => write!(f, "<nothing>"),
+            WaitFor::Time(duration) => write!(f, "{}", duration),
+            WaitFor::Port(port) => write!(f, "port {}", port),
         }
     }
 }

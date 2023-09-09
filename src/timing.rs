@@ -3,6 +3,13 @@
 )]
 pub struct Duration(std::time::Duration);
 
+impl std::fmt::Display for Duration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // we use the debug format of the inner duration, which is good enough
+        write!(f, "{:?}", self.0)
+    }
+}
+
 impl From<std::time::Duration> for Duration {
     fn from(value: std::time::Duration) -> Self {
         Self(value)

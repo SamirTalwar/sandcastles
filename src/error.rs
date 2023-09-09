@@ -17,6 +17,14 @@ pub enum DaemonError {
         #[serde_as(as = "serde_with::DisplayFromStr")]
         std::sync::mpsc::SendError<std::os::unix::net::UnixStream>,
     ),
+    StartProcessError(LoggableIoError),
+    CheckProcessError(LoggableIoError),
+    StopProcessError {
+        process_id: u32,
+        #[serde(flatten)]
+        inner: LoggableIoError,
+    },
+    TimeOut(crate::WaitFor),
 }
 
 impl Display for DaemonError {
@@ -33,6 +41,12 @@ impl Display for DaemonError {
                 write!(f, "response serialization error: {}", inner)
             }
             Self::ShutdownRequestError(inner) => write!(f, "shutdown request error: {}", inner),
+            Self::StartProcessError(inner) => write!(f, "start process error: {}", inner),
+            Self::CheckProcessError(inner) => write!(f, "check process error: {}", inner),
+            Self::StopProcessError { process_id, inner } => {
+                write!(f, "stop process error (id: {}): {}", process_id, inner)
+            }
+            Self::TimeOut(wait) => write!(f, "timed out waiting for {}", wait),
         }
     }
 }
