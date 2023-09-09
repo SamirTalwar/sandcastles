@@ -4,7 +4,7 @@ use crate::error::{DaemonError, DaemonResult};
 use crate::ports::Port;
 use crate::timing::Duration;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum WaitFor {
     None,
     Time(Duration),

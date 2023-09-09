@@ -152,7 +152,7 @@ fn handle_connection(
                 Ok(()) => Response::Success,
                 Err(error) => {
                     log::warning!(event = "START", instruction, error);
-                    Response::Failure(error.to_string())
+                    Response::Failure(error)
                 }
             };
             log::debug!(event = "HANDLE", response);

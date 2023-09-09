@@ -69,15 +69,23 @@ fn main() -> anyhow::Result<()> {
             command,
             arguments,
             environment,
-        } => Client::connect_to(&socket_path)?.start(Start {
-            service: Service::Program(Program {
-                command,
-                arguments,
-                environment: environment.into_iter().collect(),
-            }),
-            wait: WaitFor::None,
-        }),
-        args::Command::Shutdown => Client::connect_to(&socket_path)?.shutdown(),
+        } => {
+            let mut client = Client::connect_to(&socket_path)?;
+            client.start(Start {
+                service: Service::Program(Program {
+                    command,
+                    arguments,
+                    environment: environment.into_iter().collect(),
+                }),
+                wait: WaitFor::None,
+            })?;
+            Ok(())
+        }
+        args::Command::Shutdown => {
+            let mut client = Client::connect_to(&socket_path)?;
+            client.shutdown()?;
+            Ok(())
+        }
     }
 }
 

@@ -4,7 +4,7 @@ use std::thread;
 
 use crate::timing::Duration;
 
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Port(pub u16);
 
 impl std::fmt::Display for Port {

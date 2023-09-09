@@ -5,7 +5,7 @@ pub use programs::*;
 use crate::error::DaemonResult;
 use crate::timing::Duration;
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Service {
     Program(Program),
 }

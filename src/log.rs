@@ -43,7 +43,7 @@ impl Loggable for std::io::Error {
     }
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LoggableIoError {
     kind: String,
     message: String,

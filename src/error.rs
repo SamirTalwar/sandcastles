@@ -3,9 +3,39 @@ use std::fmt::Display;
 
 use crate::log::LoggableIoError;
 
+pub type ClientResult<A> = std::result::Result<A, ClientError>;
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "code")]
+pub enum ClientError {
+    SocketConnectionError(LoggableIoError),
+    RequestSerializationError(String),
+    ResponseDeserializationError(String),
+    DaemonError(DaemonError),
+}
+
+impl Display for ClientError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SocketConnectionError(inner) => write!(f, "socket connection error: {}", inner),
+            Self::RequestSerializationError(inner) => {
+                write!(f, "request serialization error: {}", inner)
+            }
+            Self::ResponseDeserializationError(inner) => {
+                write!(f, "response deserialization error: {}", inner)
+            }
+            Self::DaemonError(inner) => {
+                write!(f, "daemon error: {}", inner)
+            }
+        }
+    }
+}
+
+impl Error for ClientError {}
+
 pub type DaemonResult<A> = std::result::Result<A, DaemonError>;
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "code")]
 pub enum DaemonError {
     SocketCreationError(LoggableIoError),

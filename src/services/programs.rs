@@ -80,7 +80,7 @@ impl From<std::path::PathBuf> for Argument {
 
 pub type Environment = BTreeMap<Argument, Argument>;
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Program {
     pub command: Argument,
     pub arguments: Vec<Argument>,
