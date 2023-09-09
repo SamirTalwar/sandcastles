@@ -8,7 +8,7 @@ def run [name operation] {
 }
 
 run 'cargo build' { cargo build --all-targets }
-run 'cargo test' { cargo test }
+run 'cargo nextest run' { cargo nextest run }
 run 'cargo clippy' { cargo clippy -- --deny=clippy::all }
 run 'cargo fmt' { cargo fmt --check }
 run 'cargo machete' { cargo machete }
