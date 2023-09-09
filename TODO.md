@@ -49,10 +49,10 @@ Expected functionality is as follows:
 
 ## Logging
 
-- [ ] ensure that exceptions are logged without crashing the daemon
-- [ ] log in a structured format, with error codes, severity, and timestamps
+- [x] ensure that exceptions are logged without crashing the daemon
+- [x] log in a structured format, with error codes, severity, and timestamps
 - [ ] serialize the logs so they're pretty on the terminal
-- [ ] report meaningful errors back to the client
+- [x] report meaningful errors back to the client
 
 ## Responsiveness
 
