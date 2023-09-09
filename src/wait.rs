@@ -5,6 +5,7 @@ use crate::ports::Port;
 use crate::timing::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", content = "value", rename_all = "snake_case")]
 pub enum WaitFor {
     None,
     Time(Duration),
@@ -17,7 +18,7 @@ impl WaitFor {
             Self::None => Ok(()),
             Self::Time(duration) => {
                 if *duration >= timeout {
-                    return Err(DaemonError::TimeOut(self.clone()));
+                    return Err(DaemonError::TimeOut);
                 }
                 duration.sleep();
                 Ok(())
@@ -27,7 +28,7 @@ impl WaitFor {
                 while port.is_available() {
                     Duration::QUANTUM.sleep();
                     if Instant::now() - start_time > timeout.into() {
-                        return Err(DaemonError::TimeOut(self.clone()));
+                        return Err(DaemonError::TimeOut);
                     }
                 }
                 Ok(())

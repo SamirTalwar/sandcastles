@@ -43,7 +43,7 @@ pub enum DaemonError {
         #[serde(flatten)]
         inner: LoggableIoError,
     },
-    TimeOut(crate::WaitFor),
+    TimeOut,
 }
 
 impl Display for DaemonError {
@@ -60,7 +60,7 @@ impl Display for DaemonError {
             Self::StopProcessError { process_id, inner } => {
                 write!(f, "stop process error (id: {}): {}", process_id, inner)
             }
-            Self::TimeOut(wait) => write!(f, "timed out waiting for {}", wait),
+            Self::TimeOut => write!(f, "timed out"),
         }
     }
 }
@@ -72,18 +72,18 @@ pub type CommunicationResult<A> = Result<A, CommunicationError>;
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "code")]
 pub enum CommunicationError {
-    SerializationError(String),
-    DeserializationError(String),
+    SerializationError { message: String },
+    DeserializationError { message: String },
 }
 
 impl Display for CommunicationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::SerializationError(inner) => {
-                write!(f, "serialization error: {}", inner)
+            Self::SerializationError { message } => {
+                write!(f, "serialization error: {}", message)
             }
-            Self::DeserializationError(inner) => {
-                write!(f, "deserialization error: {}", inner)
+            Self::DeserializationError { message } => {
+                write!(f, "deserialization error: {}", message)
             }
         }
     }
