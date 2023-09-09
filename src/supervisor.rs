@@ -93,7 +93,7 @@ mod tests {
         let supervisor = Supervisor::new();
         supervisor.start(&Start {
             service: test_services::http_hello_world(service_port),
-            wait: WaitFor::Port(service_port),
+            wait: WaitFor::Port { port: service_port },
         })?;
 
         let response_body =
@@ -111,7 +111,7 @@ mod tests {
             let supervisor = Supervisor::new();
             supervisor.start(&Start {
                 service: test_services::http_hello_world(service_port),
-                wait: WaitFor::Port(service_port),
+                wait: WaitFor::Port { port: service_port },
             })?;
 
             assert!(

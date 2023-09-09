@@ -5,25 +5,25 @@ use crate::ports::Port;
 use crate::timing::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum WaitFor {
     None,
-    Time(Duration),
-    Port(Port),
+    Time { duration: Duration },
+    Port { port: Port },
 }
 
 impl WaitFor {
     pub(crate) fn block_until_ready(&self, timeout: Duration) -> DaemonResult<()> {
         match self {
             Self::None => Ok(()),
-            Self::Time(duration) => {
+            Self::Time { duration } => {
                 if *duration >= timeout {
                     return Err(DaemonError::TimeOut);
                 }
                 duration.sleep();
                 Ok(())
             }
-            Self::Port(port) => {
+            Self::Port { port } => {
                 let start_time = Instant::now();
                 while port.is_available() {
                     Duration::QUANTUM.sleep();
@@ -41,8 +41,8 @@ impl std::fmt::Display for WaitFor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             WaitFor::None => write!(f, "<nothing>"),
-            WaitFor::Time(duration) => write!(f, "{}", duration),
-            WaitFor::Port(port) => write!(f, "port {}", port),
+            WaitFor::Time { duration } => write!(f, "{}", duration),
+            WaitFor::Port { port } => write!(f, "port {}", port),
         }
     }
 }
@@ -66,7 +66,9 @@ mod tests {
 
     #[test]
     fn test_wait_for_time() -> anyhow::Result<()> {
-        let wait = WaitFor::Time(Duration::of(1, DurationUnit::Seconds));
+        let wait = WaitFor::Time {
+            duration: Duration::of(1, DurationUnit::Seconds),
+        };
 
         let start_time = Instant::now();
         wait.block_until_ready(Duration::of(2, DurationUnit::Seconds))?;
@@ -84,7 +86,9 @@ mod tests {
 
     #[test]
     fn test_time_out_waiting_for_time() -> anyhow::Result<()> {
-        let wait = WaitFor::Time(Duration::of(1, DurationUnit::Seconds));
+        let wait = WaitFor::Time {
+            duration: Duration::of(1, DurationUnit::Seconds),
+        };
 
         let actual = wait.block_until_ready(Duration::of(100, DurationUnit::Milliseconds));
 
@@ -95,7 +99,7 @@ mod tests {
     #[test]
     fn test_wait_for_port() -> anyhow::Result<()> {
         let port = Port::next_available()?;
-        let wait = WaitFor::Port(port);
+        let wait = WaitFor::Port { port };
 
         thread::spawn(move || {
             let socket_address = net::SocketAddrV4::new(net::Ipv4Addr::UNSPECIFIED, port.0);
@@ -114,7 +118,7 @@ mod tests {
         if port.is_in_use() {
             panic!("Port {} is supposed to be available but is in use.", port);
         }
-        let wait = WaitFor::Port(port);
+        let wait = WaitFor::Port { port };
 
         let actual = wait.block_until_ready(Duration::of(100, DurationUnit::Milliseconds));
 

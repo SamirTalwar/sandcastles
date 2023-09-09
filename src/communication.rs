@@ -76,7 +76,9 @@ mod tests {
                         ("TWO".into(), "2".into()),
                     ]),
                 }),
-                wait: WaitFor::Time(Duration::QUANTUM),
+                wait: WaitFor::Time {
+                    duration: Duration::QUANTUM,
+                },
             }),
             Request::Shutdown,
         ];
