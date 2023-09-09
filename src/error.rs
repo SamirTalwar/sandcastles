@@ -6,7 +6,7 @@ use crate::log::LoggableIoError;
 pub type ClientResult<A> = std::result::Result<A, ClientError>;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "code")]
+#[serde(tag = "code", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ClientError {
     SocketConnectionError(LoggableIoError),
     CommunicationError(CommunicationError),
@@ -30,7 +30,7 @@ impl Error for ClientError {}
 pub type DaemonResult<A> = std::result::Result<A, DaemonError>;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "code")]
+#[serde(tag = "code", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum DaemonError {
     SocketCreationError(LoggableIoError),
     SocketConfigurationError(LoggableIoError),
@@ -70,7 +70,7 @@ impl Error for DaemonError {}
 pub type CommunicationResult<A> = Result<A, CommunicationError>;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "code")]
+#[serde(tag = "code", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum CommunicationError {
     SerializationError { message: String },
     DeserializationError { message: String },
