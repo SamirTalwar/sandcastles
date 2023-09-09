@@ -28,7 +28,7 @@ pub struct Start {
 
 pub(crate) trait Ship: serde::Serialize + for<'de> serde::Deserialize<'de> + Sized {
     fn read_from(reader: impl io::Read) -> CommunicationResult<Self> {
-        bincode::deserialize_from(reader)
+        rmp_serde::decode::from_read(reader)
             .map_err(|error| CommunicationError::DeserializationError(error.to_string()))
     }
 
@@ -36,8 +36,8 @@ pub(crate) trait Ship: serde::Serialize + for<'de> serde::Deserialize<'de> + Siz
         Self::read_from(buffer)
     }
 
-    fn write_to(&self, writer: impl io::Write) -> CommunicationResult<()> {
-        bincode::serialize_into(writer, self)
+    fn write_to(&self, mut writer: impl io::Write) -> CommunicationResult<()> {
+        rmp_serde::encode::write(&mut writer, self)
             .map_err(|error| CommunicationError::SerializationError(error.to_string()))
     }
 
