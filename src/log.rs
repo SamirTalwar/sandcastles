@@ -43,7 +43,7 @@ impl Loggable for std::io::Error {
     }
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct LoggableIoError {
     kind: String,
     message: String,
@@ -67,14 +67,6 @@ impl From<std::io::Error> for LoggableIoError {
 impl std::fmt::Display for LoggableIoError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{}] {}", self.kind, self.message)
-    }
-}
-
-impl Loggable for bincode::ErrorKind {
-    type Serialized = String;
-
-    fn log(&self) -> Self::Serialized {
-        self.to_string()
     }
 }
 

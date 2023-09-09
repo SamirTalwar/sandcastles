@@ -5,18 +5,14 @@ use crate::log::LoggableIoError;
 
 pub type DaemonResult<A> = std::result::Result<A, DaemonError>;
 
-#[serde_with::serde_as]
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "code")]
 pub enum DaemonError {
     SocketCreationError(LoggableIoError),
     SocketConfigurationError(LoggableIoError),
-    RequestDeserializationError(#[serde_as(as = "serde_with::DisplayFromStr")] bincode::ErrorKind),
-    ResponseSerializationError(#[serde_as(as = "serde_with::DisplayFromStr")] bincode::ErrorKind),
-    ShutdownRequestError(
-        #[serde_as(as = "serde_with::DisplayFromStr")]
-        std::sync::mpsc::SendError<std::os::unix::net::UnixStream>,
-    ),
+    RequestDeserializationError(String),
+    ResponseSerializationError(String),
+    ShutdownRequestError,
     StartProcessError(LoggableIoError),
     CheckProcessError(LoggableIoError),
     StopProcessError {
@@ -40,7 +36,7 @@ impl Display for DaemonError {
             Self::ResponseSerializationError(inner) => {
                 write!(f, "response serialization error: {}", inner)
             }
-            Self::ShutdownRequestError(inner) => write!(f, "shutdown request error: {}", inner),
+            Self::ShutdownRequestError => write!(f, "shutdown request error"),
             Self::StartProcessError(inner) => write!(f, "start process error: {}", inner),
             Self::CheckProcessError(inner) => write!(f, "check process error: {}", inner),
             Self::StopProcessError { process_id, inner } => {

@@ -12,7 +12,6 @@ clap = { version = "4.4.2", features = ["derive"] }
 nix = { version = "0.26.4", default-features = false, features = ["signal"] }
 serde = { version = "1.0.188", features = ["derive"] }
 serde_json = { version = "1.0.105", features = ["preserve_order"] }
-serde_with = "3.3.0"
 signal-hook = "0.3.17"
 
 [dev-dependencies]

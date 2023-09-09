@@ -143,7 +143,7 @@ fn handle_connection(
     stop_sender: mpsc::Sender<UnixStream>,
 ) -> DaemonResult<()> {
     let request = bincode::deserialize_from(&mut stream)
-        .map_err(|err| DaemonError::RequestDeserializationError(*err))?;
+        .map_err(|err| DaemonError::RequestDeserializationError(err.to_string()))?;
     log::debug!(event = "HANDLE", request);
     match request {
         Request::Start(instruction) => {
@@ -157,11 +157,11 @@ fn handle_connection(
             };
             log::debug!(event = "HANDLE", response);
             bincode::serialize_into(&mut stream, &response)
-                .map_err(|err| DaemonError::ResponseSerializationError(*err))
+                .map_err(|err| DaemonError::ResponseSerializationError(err.to_string()))
         }
         Request::Shutdown => stop_sender
             .send(stream)
-            .map_err(DaemonError::ShutdownRequestError),
+            .map_err(|_| DaemonError::ShutdownRequestError),
     }
 }
 
@@ -189,7 +189,7 @@ fn stop_requested(
             let response = Response::Success;
             log::debug!(event = "HANDLE", response);
             bincode::serialize_into(&mut stream, &response).unwrap_or_else(|error| {
-                log::error!(event = "ACCEPT", error = error.log());
+                log::error!(event = "ACCEPT", error = error.to_string());
             });
             true
         }
