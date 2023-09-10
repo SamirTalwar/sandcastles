@@ -17,25 +17,28 @@ impl Client {
         Ok(Client { socket })
     }
 
-    pub fn start(&mut self, instruction: Start) -> ClientResult<()> {
+    pub fn start(&mut self, instruction: Start) -> ClientResult<Name> {
         self.send(&Request::Start(instruction))
+            .and_then(|response| match response {
+                StartResponse::Success(name) => Ok(name),
+                StartResponse::Failure(error) => Err(ClientError::DaemonError(error)),
+            })
     }
 
     pub fn shutdown(&mut self) -> ClientResult<()> {
         self.send(&Request::Shutdown)
+            .map(|response| match response {
+                ShutdownResponse::Success => (),
+            })
     }
 
-    fn send(&mut self, request: &Request) -> ClientResult<()> {
+    fn send<R: Response + serde::Serialize>(&mut self, request: &Request) -> ClientResult<R> {
         log::debug!(request);
         request
             .write_to(&mut self.socket)
             .map_err(ClientError::CommunicationError)?;
-        let response =
-            Response::read_from(&mut self.socket).map_err(ClientError::CommunicationError)?;
+        let response = R::read_from(&mut self.socket).map_err(ClientError::CommunicationError)?;
         log::debug!(response);
-        match response {
-            Response::Success => Ok(()),
-            Response::Failure(error) => Err(ClientError::DaemonError(error)),
-        }
+        Ok(response)
     }
 }

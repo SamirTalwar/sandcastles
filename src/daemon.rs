@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use std::thread;
 
 use crate::awaiter::Awaiter;
-use crate::communication::{Request, Response, Ship};
+use crate::communication::{Request, Ship, ShutdownResponse, StartResponse};
 use crate::error::{DaemonError, DaemonResult};
 use crate::log;
 use crate::supervisor::Supervisor;
@@ -147,10 +147,10 @@ fn handle_connection(
         Request::Start(instruction) => {
             log::info!(event = "START", instruction);
             let response = match supervisor.start(&instruction) {
-                Ok(()) => Response::Success,
+                Ok(name) => StartResponse::Success(name),
                 Err(error) => {
                     log::warning!(event = "START", instruction, error);
-                    Response::Failure(error)
+                    StartResponse::Failure(error)
                 }
             };
             log::debug!(event = "HANDLE", response);
@@ -185,7 +185,7 @@ fn stop_requested(
                 .stop_all()
                 .unwrap_or_else(|error| log::error!(event = "SHUTDOWN", error));
 
-            let response = Response::Success;
+            let response = ShutdownResponse::Success;
             log::debug!(event = "HANDLE", response);
             response.write_to(&mut stream).unwrap_or_else(|error| {
                 log::error!(event = "ACCEPT", error);

@@ -10,14 +10,57 @@ pub(crate) enum Request {
     Shutdown,
 }
 
+pub trait Response: Ship {}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub(crate) enum Response {
-    Success,
+pub(crate) enum StartResponse {
+    Success(Name),
     Failure(DaemonError),
+}
+
+impl Response for StartResponse {}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) enum ShutdownResponse {
+    Success,
+}
+
+impl Response for ShutdownResponse {}
+
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct Name(String);
+
+impl std::fmt::Display for Name {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::str::FromStr for Name {
+    type Err = (); // should be `!` but that's experimental
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_owned()))
+    }
+}
+
+impl From<&str> for Name {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl From<String> for Name {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Start {
+    pub name: Option<Name>,
     pub service: Service,
     pub wait: WaitFor,
 }
@@ -70,6 +113,7 @@ mod tests {
     fn test_requests_are_serializable_and_deserializable() -> anyhow::Result<()> {
         let requests = vec![
             Request::Start(Start {
+                name: Some("hello".into()),
                 service: Service::Program(Program {
                     command: "program".into(),
                     arguments: vec!["one".into(), "two".into(), "three".into()],
@@ -95,53 +139,32 @@ mod tests {
     }
 
     #[test]
-    fn test_successful_responses_are_serializable_and_deserializable() -> anyhow::Result<()> {
-        let response = Response::Success;
-
-        let serialized = response.serialize()?;
-        let deserialized = Response::deserialize(&serialized)?;
-        assert_eq!(deserialized, response);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_failure_responses_are_serializable_and_deserializable() -> anyhow::Result<()> {
-        let responses = vec![
-            Response::Failure(DaemonError::SocketCreationError(
-                io::Error::new(io::ErrorKind::Other, "one").into(),
-            )),
-            Response::Failure(DaemonError::SocketConfigurationError(
+    fn test_errors_are_serializable_and_deserializable() -> anyhow::Result<()> {
+        let errors = vec![
+            DaemonError::SocketCreationError(io::Error::new(io::ErrorKind::Other, "one").into()),
+            DaemonError::SocketConfigurationError(
                 io::Error::new(io::ErrorKind::Other, "two").into(),
-            )),
-            Response::Failure(DaemonError::CommunicationError(
-                CommunicationError::SerializationError {
-                    message: "three".to_owned(),
-                },
-            )),
-            Response::Failure(DaemonError::CommunicationError(
-                CommunicationError::DeserializationError {
-                    message: "four".to_owned(),
-                },
-            )),
-            Response::Failure(DaemonError::ShutdownRequestError),
-            Response::Failure(DaemonError::StartProcessError(
-                io::Error::new(io::ErrorKind::Other, "five").into(),
-            )),
-            Response::Failure(DaemonError::CheckProcessError(
-                io::Error::new(io::ErrorKind::Other, "six").into(),
-            )),
-            Response::Failure(DaemonError::StopProcessError {
+            ),
+            DaemonError::CommunicationError(CommunicationError::SerializationError {
+                message: "three".to_owned(),
+            }),
+            DaemonError::CommunicationError(CommunicationError::DeserializationError {
+                message: "four".to_owned(),
+            }),
+            DaemonError::ShutdownRequestError,
+            DaemonError::StartProcessError(io::Error::new(io::ErrorKind::Other, "five").into()),
+            DaemonError::CheckProcessError(io::Error::new(io::ErrorKind::Other, "six").into()),
+            DaemonError::StopProcessError {
                 process_id: 7,
                 inner: io::Error::new(io::ErrorKind::Other, "seven").into(),
-            }),
-            Response::Failure(DaemonError::TimeOut),
+            },
+            DaemonError::TimeOut,
         ];
 
-        for response in responses {
-            let serialized = response.serialize()?;
-            let deserialized = Response::deserialize(&serialized)?;
-            assert_eq!(deserialized, response);
+        for error in errors {
+            let serialized = error.serialize()?;
+            let deserialized = DaemonError::deserialize(&serialized)?;
+            assert_eq!(deserialized, error);
         }
 
         Ok(())

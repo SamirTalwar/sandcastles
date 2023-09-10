@@ -11,7 +11,7 @@ use sandcastles::*;
 mod args {
     use std::path::PathBuf;
 
-    use sandcastles::Argument;
+    use sandcastles::{Argument, Name};
 
     #[derive(Debug, clap::Parser)]
     #[command(author, version, about, long_about = None)]
@@ -26,6 +26,8 @@ mod args {
     pub enum Command {
         Daemon,
         Start {
+            #[arg(long = "name")]
+            name: Option<Name>,
             command: Argument,
             arguments: Vec<Argument>,
             #[arg(long = "env", value_parser = parse_env)]
@@ -66,12 +68,14 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         args::Command::Start {
+            name,
             command,
             arguments,
             environment,
         } => {
             let mut client = Client::connect_to(&socket_path)?;
-            client.start(Start {
+            let name = client.start(Start {
+                name,
                 service: Service::Program(Program {
                     command,
                     arguments,
@@ -79,6 +83,7 @@ fn main() -> anyhow::Result<()> {
                 }),
                 wait: WaitFor::AMoment,
             })?;
+            println!("{}", name);
             Ok(())
         }
         args::Command::Shutdown => {
