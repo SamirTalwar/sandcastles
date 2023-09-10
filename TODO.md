@@ -13,7 +13,7 @@ Expected functionality is as follows:
 ## Process management
 
 - [x] start processes
-- [ ] wait for a process to start, and check it hasn't immediately crashed
+- [x] wait for a process to start, and check it hasn't immediately crashed
 - [x] stop all processes on shutdown
 - [ ] provide a way to shut down a single process
 - [x] time out when waiting for a process to stop, and kill it

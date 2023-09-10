@@ -77,7 +77,7 @@ fn main() -> anyhow::Result<()> {
                     arguments,
                     environment: environment.into_iter().collect(),
                 }),
-                wait: WaitFor::None,
+                wait: WaitFor::AMoment,
             })?;
             Ok(())
         }

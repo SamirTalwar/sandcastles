@@ -23,6 +23,12 @@ pub(crate) enum RunningService {
 }
 
 impl RunningService {
+    pub(crate) fn is_running(&mut self) -> DaemonResult<bool> {
+        match self {
+            Self::Program(p) => p.is_running(),
+        }
+    }
+
     pub(crate) fn stop(&mut self, timeout: Duration) -> DaemonResult<()> {
         match self {
             Self::Program(p) => p.stop(timeout),

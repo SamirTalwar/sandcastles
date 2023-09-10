@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::communication::Start;
-use crate::error::DaemonResult;
+use crate::error::{DaemonError, DaemonResult};
 use crate::services::*;
 use crate::timing::Duration;
 
@@ -22,9 +22,13 @@ impl Supervisor {
     pub fn start(&self, instruction: &Start) -> DaemonResult<()> {
         let running = instruction.service.start()?;
         let mut inner = self.0.lock().unwrap();
-        inner.add(running);
+        let running = inner.add(running);
         instruction.wait.block_until_ready(Duration::FOREVER)?; // we need to pick a global timeout here
-        Ok(())
+        if running.is_running()? {
+            Ok(())
+        } else {
+            Err(DaemonError::ServiceCrashedError)
+        }
     }
 
     pub fn stop_all(&self) -> DaemonResult<()> {
@@ -39,8 +43,9 @@ impl RunningServices {
         Self(Vec::new())
     }
 
-    fn add(&mut self, service: RunningService) {
+    fn add(&mut self, service: RunningService) -> &mut RunningService {
         self.0.push(service);
+        self.0.last_mut().unwrap()
     }
 
     fn stop_all(&mut self) -> DaemonResult<()> {
@@ -78,7 +83,7 @@ mod tests {
         let supervisor = Supervisor::new();
         supervisor.start(&Start {
             service: test_services::file_watch(&output_file, vec!["echo".into(), "output".into()]),
-            wait: WaitFor::None,
+            wait: WaitFor::AMoment,
         })?;
 
         eventually(|| {
@@ -100,6 +105,22 @@ mod tests {
             reqwest::blocking::get(format!("http://localhost:{}/", service_port))?.text()?;
 
         assert_eq!(response_body, "Hello, world!");
+        Ok(())
+    }
+
+    #[test]
+    fn test_starts_a_single_service_and_waits_a_little() -> anyhow::Result<()> {
+        let supervisor = Supervisor::new();
+        let result = supervisor.start(&Start {
+            service: Service::Program(Program {
+                command: "true".into(),
+                arguments: Default::default(),
+                environment: Default::default(),
+            }),
+            wait: WaitFor::AMoment,
+        });
+
+        assert_eq!(result, Err(DaemonError::ServiceCrashedError));
         Ok(())
     }
 

@@ -103,7 +103,6 @@ impl Program {
 }
 
 impl RunningProgram {
-    #[cfg(test)]
     pub(crate) fn is_running(&mut self) -> DaemonResult<bool> {
         let exit_code = self
             .process
@@ -113,31 +112,32 @@ impl RunningProgram {
     }
 
     pub(crate) fn stop(&mut self, timeout: Duration) -> DaemonResult<()> {
+        self.kill(nix::sys::signal::Signal::SIGTERM)?;
+        let sigterm_time = Instant::now();
+        while !matches!(self.process.try_wait(), Ok(Some(_))) {
+            if Instant::now() - sigterm_time > timeout.into() {
+                self.kill(nix::sys::signal::Signal::SIGKILL)?;
+            }
+            Duration::QUANTUM.sleep();
+        }
+        Ok(())
+    }
+
+    fn kill(&self, signal: nix::sys::signal::Signal) -> DaemonResult<()> {
         let unwrapped_process_id = self.process.id();
         let process_id = nix::unistd::Pid::from_raw(
             unwrapped_process_id
                 .try_into()
                 .expect("Could not convert a process ID."),
         );
-        nix::sys::signal::kill(process_id, nix::sys::signal::Signal::SIGTERM).map_err(|error| {
-            DaemonError::StopProcessError {
+        match nix::sys::signal::kill(process_id, signal) {
+            Ok(()) => Ok(()),
+            Err(nix::errno::Errno::ESRCH) => Ok(()), // the process was already stopped
+            Err(error) => Err(DaemonError::StopProcessError {
                 process_id: unwrapped_process_id,
                 inner: std::io::Error::from_raw_os_error(error as i32).into(),
-            }
-        })?;
-        let sigterm_time = Instant::now();
-        while !matches!(self.process.try_wait(), Ok(Some(_))) {
-            if Instant::now() - sigterm_time > timeout.into() {
-                nix::sys::signal::kill(process_id, nix::sys::signal::Signal::SIGKILL).map_err(
-                    |error| DaemonError::StopProcessError {
-                        process_id: unwrapped_process_id,
-                        inner: std::io::Error::from_raw_os_error(error as i32).into(),
-                    },
-                )?;
-            }
-            Duration::QUANTUM.sleep();
+            }),
         }
-        Ok(())
     }
 }
 
@@ -211,6 +211,31 @@ mod tests {
         assert!(
             !running_program.is_running()?,
             "Expected the process to have stopped."
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ntest::timeout(2000)]
+    fn test_stopping_a_stopped_process() -> anyhow::Result<()> {
+        let program = Program {
+            command: "true".into(),
+            arguments: Default::default(),
+            environment: Default::default(),
+        };
+        let mut running_program = program.start()?;
+
+        Duration::QUANTUM.sleep();
+        assert!(
+            !running_program.is_running()?,
+            "The process should have stopped."
+        );
+
+        running_program.stop(Duration::of(1, DurationUnit::Seconds))?;
+
+        assert!(
+            !running_program.is_running()?,
+            "Expected the process to still be stopped."
         );
         Ok(())
     }

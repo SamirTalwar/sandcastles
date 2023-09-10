@@ -7,7 +7,7 @@ use crate::timing::Duration;
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WaitFor {
-    None,
+    AMoment,
     Time { duration: Duration },
     Port { port: Port },
 }
@@ -15,7 +15,10 @@ pub enum WaitFor {
 impl WaitFor {
     pub(crate) fn block_until_ready(&self, timeout: Duration) -> DaemonResult<()> {
         match self {
-            Self::None => Ok(()),
+            Self::AMoment => {
+                Duration::QUANTUM.sleep();
+                Ok(())
+            }
             Self::Time { duration } => {
                 if *duration >= timeout {
                     return Err(DaemonError::TimeOut);
@@ -40,7 +43,7 @@ impl WaitFor {
 impl std::fmt::Display for WaitFor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            WaitFor::None => write!(f, "<nothing>"),
+            WaitFor::AMoment => write!(f, "a moment"),
             WaitFor::Time { duration } => write!(f, "{}", duration),
             WaitFor::Port { port } => write!(f, "port {}", port),
         }
@@ -58,9 +61,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_no_wait() -> anyhow::Result<()> {
-        WaitFor::None.block_until_ready(Duration::ZERO)?;
+    fn test_wait_a_moment() -> anyhow::Result<()> {
+        let start_time = Instant::now();
+        WaitFor::AMoment.block_until_ready(Duration::ZERO)?;
+        let end_time = Instant::now();
 
+        let elapsed = end_time - start_time;
+        assert!(
+            elapsed < std::time::Duration::from_millis(500),
+            "Expected the elapsed time of {:?} to be a very short amount of time.",
+            elapsed
+        );
         Ok(())
     }
 

@@ -36,6 +36,7 @@ pub enum DaemonError {
     SocketConfigurationError(LoggableIoError),
     CommunicationError(CommunicationError),
     ShutdownRequestError,
+    ServiceCrashedError,
     StartProcessError(LoggableIoError),
     CheckProcessError(LoggableIoError),
     StopProcessError {
@@ -55,6 +56,7 @@ impl Display for DaemonError {
             }
             Self::CommunicationError(inner) => write!(f, "{}", inner),
             Self::ShutdownRequestError => write!(f, "shutdown request error"),
+            Self::ServiceCrashedError => write!(f, "service crashed"),
             Self::StartProcessError(inner) => write!(f, "start process error: {}", inner),
             Self::CheckProcessError(inner) => write!(f, "check process error: {}", inner),
             Self::StopProcessError { process_id, inner } => {
