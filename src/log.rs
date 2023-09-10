@@ -166,7 +166,7 @@ macro_rules! fatal {
 macro_rules! log {
     ( $($tokens:tt)+ ) => {
         $crate::log::log_explicitly!(
-            std::io::stdout(),
+            std::io::stderr(),
             chrono::offset::Utc::now(),
             $($tokens)+
         )
@@ -176,7 +176,7 @@ macro_rules! log {
 /// Internal; subject to change.
 ///
 /// ```ignore
-/// log_explicitly!(stdout(), now(), Level::INFO, name = "value", ...)
+/// log_explicitly!(stderr(), now(), Level::INFO, name = "value", ...)
 /// ```
 #[doc(hidden)]
 macro_rules! log_explicitly {
