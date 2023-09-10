@@ -183,7 +183,6 @@ macro_rules! log_explicitly {
     ( $output: expr, $timestamp: expr, $severity: expr, $($rest:tt)+ ) => {{
         #[allow(unused_imports)]
         use $crate::log::Loggable;
-        use serde::Serialize;
         use std::io::Write;
         let mut values = serde_json::map::Map::new();
         values.insert(
@@ -196,7 +195,7 @@ macro_rules! log_explicitly {
         );
         $crate::log::log_builder!(values, $($rest)+);
         let mut serializer = serde_json::Serializer::new($output);
-        values.serialize(&mut serializer).unwrap();
+        serde::Serialize::serialize(&values, &mut serializer).unwrap();
         writeln!(serializer.into_inner()).unwrap();
     }};
 }
