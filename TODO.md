@@ -25,6 +25,15 @@ Expected functionality is as follows:
 - [ ] capture the `PATH` from the client, not the daemon
 - [ ] sanitize all environment variables except those specified
 
+## Status
+
+- [ ] list the running processes
+- [ ] list stopped processes
+- [ ] require explicit cleanup of stopped processes
+- [ ] make it easy to clean up everything at once
+- [ ] preserve knowledge if the daemon crashes
+- [ ] detect if a process has stopped between crashing and restarting
+
 ## Creating environments
 
 - [ ] accept a Nix expression to construct a Nix environment
@@ -63,6 +72,7 @@ Expected functionality is as follows:
 ## Command-line interface
 
 - [x] explicitly start the daemon
+- [ ] detach from the daemon once running by default
 - [ ] initialize the daemon on first use
 - [ ] refuse to start a daemon on the same socket as another
 - [x] shut down the daemon
