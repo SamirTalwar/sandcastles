@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::communication::{Name, Start};
 use crate::error::{DaemonError, DaemonResult};
+use crate::names::random_name;
 use crate::services::*;
 use crate::timing::Duration;
 
@@ -25,7 +26,10 @@ impl Supervisor {
         let running = inner.add(running);
         instruction.wait.block_until_ready(Duration::FOREVER)?; // we need to pick a global timeout here
         if running.is_running()? {
-            Ok(instruction.name.clone().unwrap_or_else(|| "".into()))
+            Ok(instruction
+                .name
+                .clone()
+                .unwrap_or_else(|| random_name().into()))
         } else {
             Err(DaemonError::ServiceCrashedError)
         }
@@ -78,7 +82,7 @@ mod tests {
     #[test]
     fn test_starts_a_single_service() -> anyhow::Result<()> {
         let output_directory = tempfile::tempdir()?;
-        let output_file = output_directory.path().join("timestamp.txt");
+        let output_file = output_directory.path().join("output.txt");
 
         let supervisor = Supervisor::new();
         supervisor.start(&Start {
@@ -155,7 +159,7 @@ mod tests {
     #[test]
     fn test_responds_with_the_name_if_one_is_provided() -> anyhow::Result<()> {
         let output_directory = tempfile::tempdir()?;
-        let output_file = output_directory.path().join("timestamp.txt");
+        let output_file = output_directory.path().join("output.txt");
 
         let supervisor = Supervisor::new();
         let name = supervisor.start(&Start {
@@ -165,6 +169,34 @@ mod tests {
         })?;
 
         assert_eq!(name, "thingamabob".into());
+        Ok(())
+    }
+
+    #[test]
+    fn test_generates_a_random_name_if_one_is_not_provided() -> anyhow::Result<()> {
+        let output_directory = tempfile::tempdir()?;
+        let output_file_1 = output_directory.path().join("one.txt");
+        let output_file_2 = output_directory.path().join("two.txt");
+
+        let supervisor = Supervisor::new();
+        let name_1 = supervisor.start(&Start {
+            name: None,
+            service: test_services::file_watch(
+                &output_file_1,
+                vec!["echo".into(), "output".into()],
+            ),
+            wait: WaitFor::AMoment,
+        })?;
+        let name_2 = supervisor.start(&Start {
+            name: None,
+            service: test_services::file_watch(
+                &output_file_2,
+                vec!["echo".into(), "output".into()],
+            ),
+            wait: WaitFor::AMoment,
+        })?;
+
+        assert_ne!(name_1, name_2);
         Ok(())
     }
 }

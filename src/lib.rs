@@ -10,6 +10,7 @@ pub mod timing;
 pub mod wait;
 
 mod log;
+mod names;
 
 mod test_helpers;
 mod test_programs;

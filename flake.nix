@@ -26,7 +26,11 @@
         pkgs.libiconv
       ];
       buildArguments = {
-        src = craneLib.cleanCargoSource (craneLib.path ./.);
+        src = pkgs.lib.cleanSourceWith {
+          src = craneLib.path ./.;
+          filter = path: type:
+            (builtins.match ".*\\.txt$" path != null) || (craneLib.filterCargoSources path type);
+        };
         buildInputs = runtimeDependencies;
       };
     in
