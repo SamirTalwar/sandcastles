@@ -40,6 +40,9 @@ pub enum DaemonError {
     NoSuchServiceError {
         name: Name,
     },
+    ServiceAlreadyExistsError {
+        name: Name,
+    },
     ServiceCrashedError,
     StartProcessError(LoggableIoError),
     CheckProcessError(LoggableIoError),
@@ -62,6 +65,9 @@ impl Display for DaemonError {
             Self::ShutdownRequestError => write!(f, "shutdown request error"),
             Self::NoSuchServiceError { name } => {
                 write!(f, "no such service error (name: {})", name)
+            }
+            Self::ServiceAlreadyExistsError { name } => {
+                write!(f, "service already exists error (name: {})", name)
             }
             Self::ServiceCrashedError => write!(f, "service crashed"),
             Self::StartProcessError(inner) => write!(f, "start process error: {}", inner),

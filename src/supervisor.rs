@@ -23,12 +23,15 @@ impl Supervisor {
     }
 
     pub fn start(&self, instruction: &Start) -> DaemonResult<Name> {
+        let mut inner = self.0.lock().unwrap();
         let name = instruction
             .name
             .clone()
             .unwrap_or_else(|| random_name().into());
+        if inner.has_service_named(&name) {
+            return Err(DaemonError::ServiceAlreadyExistsError { name });
+        }
         let running = instruction.service.start()?;
-        let mut inner = self.0.lock().unwrap();
         let running = inner.add(name.clone(), running);
         instruction.wait.block_until_ready(Duration::FOREVER)?; // we need to pick a global timeout here
         if running.is_running()? {
@@ -59,9 +62,13 @@ impl RunningServices {
         Self(HashMap::new())
     }
 
+    fn has_service_named(&self, name: &Name) -> bool {
+        self.0.contains_key(name)
+    }
+
     fn add(&mut self, name: Name, service: RunningService) -> &mut RunningService {
         match self.0.entry(name) {
-            Entry::Occupied(_) => todo!("adding a service with a name that's taken"),
+            Entry::Occupied(_) => unreachable!("The service name was stolen."),
             Entry::Vacant(entry) => entry.insert(service),
         }
     }
@@ -146,6 +153,28 @@ mod tests {
         });
 
         assert_eq!(result, Err(DaemonError::ServiceCrashedError));
+        Ok(())
+    }
+
+    #[test]
+    fn test_refuses_to_start_a_service_with_a_name_that_is_taken() -> anyhow::Result<()> {
+        let name = Name::from("double");
+        let output_directory = tempfile::tempdir()?;
+        let output_file = output_directory.path().join("output.txt");
+        let supervisor = Supervisor::new();
+        supervisor.start(&Start {
+            name: Some(name.clone()),
+            service: test_services::file_watch(&output_file, vec!["echo".into(), "output".into()]),
+            wait: WaitFor::AMoment,
+        })?;
+
+        let result = supervisor.start(&Start {
+            name: Some(name.clone()),
+            service: test_services::file_watch(&output_file, vec!["echo".into(), "output".into()]),
+            wait: WaitFor::AMoment,
+        });
+
+        assert_eq!(result, Err(DaemonError::ServiceAlreadyExistsError { name }));
         Ok(())
     }
 
