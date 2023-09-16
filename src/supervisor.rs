@@ -1,6 +1,8 @@
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::communication::{Name, Start};
+use crate::communication::{Name, Start, Stop};
 use crate::error::{DaemonError, DaemonResult};
 use crate::names::random_name;
 use crate::services::*;
@@ -21,17 +23,27 @@ impl Supervisor {
     }
 
     pub fn start(&self, instruction: &Start) -> DaemonResult<Name> {
+        let name = instruction
+            .name
+            .clone()
+            .unwrap_or_else(|| random_name().into());
         let running = instruction.service.start()?;
         let mut inner = self.0.lock().unwrap();
-        let running = inner.add(running);
+        let running = inner.add(name.clone(), running);
         instruction.wait.block_until_ready(Duration::FOREVER)?; // we need to pick a global timeout here
         if running.is_running()? {
-            Ok(instruction
-                .name
-                .clone()
-                .unwrap_or_else(|| random_name().into()))
+            Ok(name)
         } else {
             Err(DaemonError::ServiceCrashedError)
+        }
+    }
+
+    pub fn stop(&self, instruction: &Stop) -> DaemonResult<()> {
+        let mut inner = self.0.lock().unwrap();
+        let name = &instruction.name;
+        match inner.retrieve(name) {
+            Some(mut service) => service.stop(Duration::STOP_TIMEOUT),
+            None => Err(DaemonError::NoSuchServiceError { name: name.clone() }),
         }
     }
 
@@ -40,22 +52,28 @@ impl Supervisor {
     }
 }
 
-struct RunningServices(Vec<RunningService>);
+struct RunningServices(HashMap<Name, RunningService>);
 
 impl RunningServices {
     fn new() -> Self {
-        Self(Vec::new())
+        Self(HashMap::new())
     }
 
-    fn add(&mut self, service: RunningService) -> &mut RunningService {
-        self.0.push(service);
-        self.0.last_mut().unwrap()
+    fn add(&mut self, name: Name, service: RunningService) -> &mut RunningService {
+        match self.0.entry(name) {
+            Entry::Occupied(_) => todo!("adding a service with a name that's taken"),
+            Entry::Vacant(entry) => entry.insert(service),
+        }
+    }
+
+    fn retrieve(&mut self, name: &Name) -> Option<RunningService> {
+        self.0.remove(name)
     }
 
     fn stop_all(&mut self) -> DaemonResult<()> {
         self.0
-            .drain(..)
-            .map(|mut service| service.stop(Duration::STOP_TIMEOUT))
+            .drain()
+            .map(|(_, mut service)| service.stop(Duration::STOP_TIMEOUT))
             .collect::<Vec<DaemonResult<()>>>()
             .into_iter()
             .collect::<DaemonResult<()>>()
@@ -128,6 +146,40 @@ mod tests {
         });
 
         assert_eq!(result, Err(DaemonError::ServiceCrashedError));
+        Ok(())
+    }
+
+    #[test]
+    fn test_stops_an_individual_service() -> anyhow::Result<()> {
+        let service_port = Port::next_available()?;
+        let supervisor = Supervisor::new();
+        let service_name = supervisor.start(&Start {
+            name: None,
+            service: test_services::http_hello_world(service_port),
+            wait: WaitFor::Port { port: service_port },
+        })?;
+
+        let response_status =
+            reqwest::blocking::get(format!("http://localhost:{}/", service_port))?.status();
+        assert_eq!(response_status, 200);
+
+        supervisor.stop(&Stop { name: service_name })?;
+
+        assert!(
+            service_port.is_available(),
+            "The service did not stop correctly."
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_refuses_to_stop_a_service_with_an_unknown_name() -> anyhow::Result<()> {
+        let name = Name::from("something");
+        let supervisor = Supervisor::new();
+
+        let result = supervisor.stop(&Stop { name: name.clone() });
+
+        assert_eq!(result, Err(DaemonError::NoSuchServiceError { name }));
         Ok(())
     }
 

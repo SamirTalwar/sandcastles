@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::fmt::Display;
 
+use crate::communication::Name;
 use crate::log::LoggableIoError;
 
 pub type ClientResult<A> = std::result::Result<A, ClientError>;
@@ -36,6 +37,9 @@ pub enum DaemonError {
     SocketConfigurationError(LoggableIoError),
     CommunicationError(CommunicationError),
     ShutdownRequestError,
+    NoSuchServiceError {
+        name: Name,
+    },
     ServiceCrashedError,
     StartProcessError(LoggableIoError),
     CheckProcessError(LoggableIoError),
@@ -56,6 +60,9 @@ impl Display for DaemonError {
             }
             Self::CommunicationError(inner) => write!(f, "{}", inner),
             Self::ShutdownRequestError => write!(f, "shutdown request error"),
+            Self::NoSuchServiceError { name } => {
+                write!(f, "no such service error (name: {})", name)
+            }
             Self::ServiceCrashedError => write!(f, "service crashed"),
             Self::StartProcessError(inner) => write!(f, "start process error: {}", inner),
             Self::CheckProcessError(inner) => write!(f, "check process error: {}", inner),

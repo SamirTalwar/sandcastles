@@ -65,6 +65,11 @@ pub struct Start {
     pub wait: WaitFor,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Stop {
+    pub name: Name,
+}
+
 pub trait Ship: Sized {
     fn read_from(reader: impl io::Read) -> CommunicationResult<Self>;
 
