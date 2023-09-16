@@ -7,6 +7,7 @@ use crate::wait::WaitFor;
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum Request {
     Start(Start),
+    Stop(Stop),
     Shutdown,
 }
 
@@ -19,6 +20,14 @@ pub(crate) enum StartResponse {
 }
 
 impl Response for StartResponse {}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) enum StopResponse {
+    Success,
+    Failure(DaemonError),
+}
+
+impl Response for StopResponse {}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum ShutdownResponse {

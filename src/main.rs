@@ -33,6 +33,9 @@ mod args {
             #[arg(long = "env", value_parser = parse_env)]
             environment: Vec<(Argument, Argument)>,
         },
+        Stop {
+            name: Name,
+        },
         Shutdown,
     }
 
@@ -84,6 +87,11 @@ fn main() -> anyhow::Result<()> {
                 wait: WaitFor::AMoment,
             })?;
             println!("{}", name);
+            Ok(())
+        }
+        args::Command::Stop { name } => {
+            let mut client = Client::connect_to(&socket_path)?;
+            client.stop(Stop { name })?;
             Ok(())
         }
         args::Command::Shutdown => {

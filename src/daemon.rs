@@ -16,6 +16,7 @@ use crate::error::{DaemonError, DaemonResult};
 use crate::log;
 use crate::supervisor::Supervisor;
 use crate::timing::Duration;
+use crate::StopResponse;
 
 enum StopHandle {
     Thread(thread::JoinHandle<()>),
@@ -151,6 +152,20 @@ fn handle_connection(
                 Err(error) => {
                     log::warning!(event = "START", instruction, error);
                     StartResponse::Failure(error)
+                }
+            };
+            log::debug!(event = "HANDLE", response);
+            response
+                .write_to(&mut stream)
+                .map_err(DaemonError::CommunicationError)
+        }
+        Request::Stop(instruction) => {
+            log::info!(event = "STOP", instruction);
+            let response = match supervisor.stop(&instruction) {
+                Ok(name) => StopResponse::Success,
+                Err(error) => {
+                    log::warning!(event = "STOP", instruction, error);
+                    StopResponse::Failure(error)
                 }
             };
             log::debug!(event = "HANDLE", response);
