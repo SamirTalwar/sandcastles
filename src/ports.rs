@@ -14,9 +14,10 @@ impl std::fmt::Display for Port {
 }
 
 impl Port {
+    const DYNAMIC: Self = Self(0);
+
     pub fn is_in_use(&self) -> bool {
-        let socket_address = net::SocketAddrV4::new(net::Ipv4Addr::UNSPECIFIED, self.0);
-        let result = net::TcpStream::connect(socket_address);
+        let result = net::TcpStream::connect(self.localhost());
         result.is_ok()
     }
 
@@ -25,9 +26,8 @@ impl Port {
     }
 
     pub fn next_available() -> io::Result<Self> {
-        let socket_address = net::SocketAddrV4::new(net::Ipv4Addr::UNSPECIFIED, 0);
         let port_number = {
-            let bound = net::TcpListener::bind(socket_address)?;
+            let bound = net::TcpListener::bind(Self::DYNAMIC.localhost())?;
             bound.local_addr()?.port()
         };
         thread::yield_now();
@@ -36,5 +36,14 @@ impl Port {
             Duration::QUANTUM.sleep();
         }
         Ok(port)
+    }
+
+    fn localhost(&self) -> net::SocketAddr {
+        net::SocketAddr::V6(net::SocketAddrV6::new(
+            net::Ipv6Addr::LOCALHOST,
+            self.0,
+            0,
+            0,
+        ))
     }
 }

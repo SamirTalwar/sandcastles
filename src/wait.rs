@@ -113,7 +113,7 @@ mod tests {
         let wait = WaitFor::Port { port };
 
         thread::spawn(move || {
-            let socket_address = net::SocketAddrV4::new(net::Ipv4Addr::UNSPECIFIED, port.0);
+            let socket_address = net::SocketAddrV6::new(net::Ipv6Addr::LOCALHOST, port.0, 0, 0);
             let listener = net::TcpListener::bind(socket_address).unwrap();
             listener.accept().unwrap(); // block until we receive a connection
         });
