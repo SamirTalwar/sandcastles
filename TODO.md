@@ -15,10 +15,10 @@ Expected functionality is as follows:
 - [x] start processes
 - [x] wait for a process to start, and check it hasn't immediately crashed
 - [x] stop all processes on shutdown
-- [ ] provide a way to shut down a single process
+- [x] provide a way to shut down a single process
 - [x] time out when waiting for a process to stop, and kill it
-- [ ] log when a process stops with a non-zero exit code
-- [ ] log when a process stops with a signal exit code
+- [x] log when a process stops with a non-zero exit code
+- [x] log when a process stops with a signal exit code
 - [ ] log when a process has been killed
 - [ ] detect when a process has stopped, and log it
 - [ ] group processes, and shut down entire process groups

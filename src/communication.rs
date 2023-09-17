@@ -71,6 +71,7 @@ impl From<String> for Name {
 pub enum ExitStatus {
     None,
     ExitedWithCode(u8),
+    ExitedWithSignal(u8),
 }
 
 impl From<ExitStatus> for std::process::ExitCode {
@@ -78,6 +79,7 @@ impl From<ExitStatus> for std::process::ExitCode {
         match value {
             ExitStatus::None => Self::SUCCESS,
             ExitStatus::ExitedWithCode(code) => Self::from(code),
+            ExitStatus::ExitedWithSignal(signal) => Self::from(128 + signal),
         }
     }
 }

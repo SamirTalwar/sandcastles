@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
+use std::os::unix::process::ExitStatusExt;
 use std::process::{Child, Command};
 use std::time::Instant;
 
@@ -118,9 +119,18 @@ impl RunningProgram {
         let sigterm_time = Instant::now();
         loop {
             if let Ok(Some(exit_status)) = self.process.try_wait() {
-                return Ok(match exit_status.code().and_then(|s| s.try_into().ok()) {
-                    None => ExitStatus::None,
-                    Some(code) => ExitStatus::ExitedWithCode(code),
+                return Ok(match exit_status.code() {
+                    None => match exit_status.signal() {
+                        None => ExitStatus::None,
+                        Some(signal) => match u8::try_from(signal).ok() {
+                            None => ExitStatus::None,
+                            Some(signal) => ExitStatus::ExitedWithSignal(signal),
+                        },
+                    },
+                    Some(code) => match u8::try_from(code).ok() {
+                        None => ExitStatus::None,
+                        Some(code) => ExitStatus::ExitedWithCode(code),
+                    },
                 });
             }
             if Instant::now() - sigterm_time > timeout_sys {
@@ -220,7 +230,7 @@ mod tests {
             !running_program.is_running()?,
             "Expected the process to have stopped."
         );
-        assert_eq!(exit_status, ExitStatus::None);
+        assert_eq!(exit_status, ExitStatus::ExitedWithSignal(9));
         Ok(())
     }
 
