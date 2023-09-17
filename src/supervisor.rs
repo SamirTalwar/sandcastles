@@ -2,7 +2,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::communication::{Name, Start, Stop};
+use crate::communication::{ExitStatus, Name, Start, Stop};
 use crate::error::{DaemonError, DaemonResult};
 use crate::names::random_name;
 use crate::services::*;
@@ -41,7 +41,7 @@ impl Supervisor {
         }
     }
 
-    pub fn stop(&self, instruction: &Stop) -> DaemonResult<()> {
+    pub fn stop(&self, instruction: &Stop) -> DaemonResult<ExitStatus> {
         let mut inner = self.0.lock().unwrap();
         let name = &instruction.name;
         match inner.retrieve(name) {
@@ -80,7 +80,7 @@ impl RunningServices {
     fn stop_all(&mut self) -> DaemonResult<()> {
         self.0
             .drain()
-            .map(|(_, mut service)| service.stop(Duration::STOP_TIMEOUT))
+            .map(|(_, mut service)| service.stop(Duration::STOP_TIMEOUT).map(|_| ()))
             .collect::<Vec<DaemonResult<()>>>()
             .into_iter()
             .collect::<DaemonResult<()>>()

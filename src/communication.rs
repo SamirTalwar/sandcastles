@@ -23,7 +23,7 @@ impl Response for StartResponse {}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum StopResponse {
-    Success,
+    Success(ExitStatus),
     Failure(DaemonError),
 }
 
@@ -64,6 +64,21 @@ impl From<&str> for Name {
 impl From<String> for Name {
     fn from(value: String) -> Self {
         Self(value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ExitStatus {
+    None,
+    ExitedWithCode(u8),
+}
+
+impl From<ExitStatus> for std::process::ExitCode {
+    fn from(value: ExitStatus) -> Self {
+        match value {
+            ExitStatus::None => Self::SUCCESS,
+            ExitStatus::ExitedWithCode(code) => Self::from(code),
+        }
     }
 }
 

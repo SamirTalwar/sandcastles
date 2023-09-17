@@ -7,6 +7,7 @@ use bstr::{ByteSlice, ByteVec};
 
 use crate::error::{DaemonError, DaemonResult};
 use crate::timing::Duration;
+use crate::ExitStatus;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Argument(OsString);
@@ -111,16 +112,22 @@ impl RunningProgram {
         Ok(exit_code.is_none())
     }
 
-    pub(crate) fn stop(&mut self, timeout: Duration) -> DaemonResult<()> {
+    pub(crate) fn stop(&mut self, timeout: Duration) -> DaemonResult<ExitStatus> {
+        let timeout_sys = std::time::Duration::from(timeout);
         self.kill(nix::sys::signal::Signal::SIGTERM)?;
         let sigterm_time = Instant::now();
-        while !matches!(self.process.try_wait(), Ok(Some(_))) {
-            if Instant::now() - sigterm_time > timeout.into() {
+        loop {
+            if let Ok(Some(exit_status)) = self.process.try_wait() {
+                return Ok(match exit_status.code().and_then(|s| s.try_into().ok()) {
+                    None => ExitStatus::None,
+                    Some(code) => ExitStatus::ExitedWithCode(code),
+                });
+            }
+            if Instant::now() - sigterm_time > timeout_sys {
                 self.kill(nix::sys::signal::Signal::SIGKILL)?;
             }
             Duration::QUANTUM.sleep();
         }
-        Ok(())
     }
 
     fn kill(&self, signal: nix::sys::signal::Signal) -> DaemonResult<()> {
@@ -163,12 +170,13 @@ mod tests {
             "The process stopped abruptly."
         );
 
-        running_program.stop(Duration::of(5, DurationUnit::Seconds))?;
+        let exit_status = running_program.stop(Duration::of(5, DurationUnit::Seconds))?;
 
         assert!(
             !running_program.is_running()?,
             "Expected the process to have stopped."
         );
+        assert_eq!(exit_status, ExitStatus::ExitedWithCode(0));
         Ok(())
     }
 
@@ -206,12 +214,13 @@ mod tests {
             "The process stopped abruptly."
         );
 
-        running_program.stop(Duration::of(1, DurationUnit::Seconds))?;
+        let exit_status = running_program.stop(Duration::of(1, DurationUnit::Seconds))?;
 
         assert!(
             !running_program.is_running()?,
             "Expected the process to have stopped."
         );
+        assert_eq!(exit_status, ExitStatus::None);
         Ok(())
     }
 
@@ -231,12 +240,13 @@ mod tests {
             "The process should have stopped."
         );
 
-        running_program.stop(Duration::of(1, DurationUnit::Seconds))?;
+        let exit_status = running_program.stop(Duration::of(1, DurationUnit::Seconds))?;
 
         assert!(
             !running_program.is_running()?,
             "Expected the process to still be stopped."
         );
+        assert_eq!(exit_status, ExitStatus::ExitedWithCode(0));
         Ok(())
     }
 

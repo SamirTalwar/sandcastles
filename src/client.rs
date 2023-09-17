@@ -25,10 +25,10 @@ impl Client {
             })
     }
 
-    pub fn stop(&mut self, instruction: Stop) -> ClientResult<()> {
+    pub fn stop(&mut self, instruction: Stop) -> ClientResult<ExitStatus> {
         self.send(&Request::Stop(instruction))
             .and_then(|response| match response {
-                StopResponse::Success => Ok(()),
+                StopResponse::Success(exit_status) => Ok(exit_status),
                 StopResponse::Failure(error) => Err(ClientError::DaemonError(error)),
             })
     }

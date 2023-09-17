@@ -162,7 +162,7 @@ fn handle_connection(
         Request::Stop(instruction) => {
             log::info!(event = "STOP", instruction);
             let response = match supervisor.stop(&instruction) {
-                Ok(()) => StopResponse::Success,
+                Ok(exit_status) => StopResponse::Success(exit_status),
                 Err(error) => {
                     log::warning!(event = "STOP", instruction, error);
                     StopResponse::Failure(error)

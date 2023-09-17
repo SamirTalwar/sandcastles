@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use std::process::ExitCode;
 use std::sync::Arc;
 
 use clap::Parser;
@@ -48,7 +49,7 @@ mod args {
     }
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<ExitCode> {
     let args = args::Arguments::parse();
     let socket_path = args.socket_path.unwrap_or_else(default_socket_path);
     match args.command {
@@ -68,7 +69,7 @@ fn main() -> anyhow::Result<()> {
                 }
             }
             daemon.wait();
-            Ok(())
+            Ok(ExitCode::SUCCESS)
         }
         args::Command::Start {
             name,
@@ -87,17 +88,17 @@ fn main() -> anyhow::Result<()> {
                 wait: WaitFor::AMoment,
             })?;
             println!("{}", name);
-            Ok(())
+            Ok(ExitCode::SUCCESS)
         }
         args::Command::Stop { name } => {
             let mut client = Client::connect_to(&socket_path)?;
-            client.stop(Stop { name })?;
-            Ok(())
+            let exit_status = client.stop(Stop { name })?;
+            Ok(exit_status.into())
         }
         args::Command::Shutdown => {
             let mut client = Client::connect_to(&socket_path)?;
             client.shutdown()?;
-            Ok(())
+            Ok(ExitCode::SUCCESS)
         }
     }
 }

@@ -2,6 +2,7 @@ pub mod programs;
 
 pub use programs::*;
 
+use crate::communication::ExitStatus;
 use crate::error::DaemonResult;
 use crate::timing::Duration;
 
@@ -29,7 +30,7 @@ impl RunningService {
         }
     }
 
-    pub(crate) fn stop(&mut self, timeout: Duration) -> DaemonResult<()> {
+    pub(crate) fn stop(&mut self, timeout: Duration) -> DaemonResult<ExitStatus> {
         match self {
             Self::Program(p) => p.stop(timeout),
         }
