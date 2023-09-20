@@ -30,6 +30,9 @@
 //! Everything else is up to you.
 
 use std::io::Write;
+use std::sync::RwLock;
+
+use lazy_static::lazy_static;
 
 pub trait Loggable {
     type Serialized;
@@ -359,9 +362,20 @@ impl IntoIterator for Pairs {
     }
 }
 
-// TODO: actually implement this
+lazy_static! {
+    static ref LOG_FORMAT: RwLock<LogFormat> = RwLock::new(detect_log_format());
+}
+
+fn detect_log_format() -> LogFormat {
+    if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+        LogFormat::Text
+    } else {
+        LogFormat::Json
+    }
+}
+
 pub fn global_log_format() -> LogFormat {
-    LogFormat::Json
+    *LOG_FORMAT.read().unwrap()
 }
 
 #[cfg(test)]
