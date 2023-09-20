@@ -29,6 +29,8 @@
 //!
 //! Everything else is up to you.
 
+use std::io::Write;
+
 pub trait Loggable {
     type Serialized;
 
@@ -183,38 +185,28 @@ macro_rules! log_explicitly {
     ( $output: expr, $timestamp: expr, $severity: expr, $($rest:tt)+ ) => {{
         #[allow(unused_imports)]
         use $crate::log::Loggable;
-        use std::io::Write;
-        let mut values = serde_json::map::Map::new();
-        values.insert(
-            "timestamp".to_owned(),
-            serde_json::to_value($timestamp as chrono::DateTime<_>).unwrap(),
-        );
-        values.insert(
-            "severity".to_owned(),
-            serde_json::to_value($severity as $crate::log::Severity).unwrap(),
-        );
-        $crate::log::log_builder!(values, $($rest)+);
-        let mut serializer = serde_json::Serializer::new($output);
-        serde::Serialize::serialize(&values, &mut serializer).unwrap();
-        writeln!(serializer.into_inner()).unwrap();
+        #[allow(clippy::vec_init_then_push)]
+        let mut pairs = $crate::log::Pairs::with_capacity($crate::log::count_pairs!($($rest)+));
+        $crate::log::add_log_pairs!(pairs, $($rest)+);
+        $crate::log::LogFormat::Json.write($output, $timestamp, $severity, pairs);
     }};
 }
 
 #[doc(hidden)]
-macro_rules! log_builder {
+macro_rules! add_log_pairs {
     // Adds the name/value pair to the builder, and proceeds.
     //
-    //     log_builder!(builder, name = "value", ...)
+    //     add_log_pairs!(builder, name = "value", ...)
     ( $builder:ident, $name: ident = $value:expr, $($rest:tt)* ) => {
-        $crate::log::log_builder!($builder, $name = $value);
-        $crate::log::log_builder!($builder, $($rest)*)
+        $crate::log::add_log_pairs!($builder, $name = $value);
+        $crate::log::add_log_pairs!($builder, $($rest)*)
     };
 
     // Adds the name/value pair to the builder, and stops.
     //
-    //     log_builder!(builder, name = "value")
+    //     add_log_pairs!(builder, name = "value")
     ( $builder:ident, $name: ident = $value:expr ) => {
-        $builder.insert(
+        $builder.add(
             stringify!($name).to_owned(),
             serde_json::to_value(&$value).unwrap(),
         );
@@ -222,28 +214,46 @@ macro_rules! log_builder {
 
     // Adds the value to the builder, using its name, and proceeds.
     //
-    //     log_builder!(builder, name, ...)
+    //     add_log_pairs!(builder, name, ...)
     ( $builder:ident, $name: ident, $($rest:tt)* ) => {
-        $crate::log::log_builder!($builder, $name);
-        $crate::log::log_builder!($builder, $($rest)*)
+        $crate::log::add_log_pairs!($builder, $name);
+        $crate::log::add_log_pairs!($builder, $($rest)*)
     };
 
     // Adds the value to the builder, using its name, and stops.
     //
-    //     log_builder!(builder, name)
+    //     add_log_pairs!(builder, name)
     ( $builder:ident, $name: ident ) => {
-        $builder.insert(
-            stringify!($name).to_owned(),
-            serde_json::to_value(&$name).unwrap(),
-        );
+        $crate::log::add_log_pairs!($builder, $name = $name);
     };
 
     // If the user leaves a trailing comma, this swallows it.
     ( $builder:ident, ) => {};
 }
 
+// Counts the pairs.
+#[doc(hidden)]
+macro_rules! count_pairs {
+    ( $name:ident = $value:expr, $($rest:tt)* ) => {
+        1 + $crate::log::count_pairs!($($rest)*)
+    };
+
+    ( $name: ident = $value:expr ) => { 1 };
+
+    ( $name: ident, $($rest:tt)* ) => {
+        1 + $crate::log::count_pairs!($($rest)*)
+    };
+
+    ( $name: ident ) => { 1 };
+
+    ( , ) => { 0 };
+
+    ( ) => { 0 };
+}
+
+pub(crate) use add_log_pairs;
+pub(crate) use count_pairs;
 pub(crate) use log;
-pub(crate) use log_builder;
 pub(crate) use log_explicitly;
 
 #[allow(unused_imports)]
@@ -258,6 +268,65 @@ pub(crate) use info;
 pub(crate) use trace;
 #[allow(unused_imports)]
 pub(crate) use warning;
+
+/// The textual format used when writing.
+#[derive(Debug, Clone, Copy)]
+pub enum LogFormat {
+    Json,
+}
+
+impl LogFormat {
+    /// Writes the given items to the log output in the format specified.
+    pub fn write(
+        self,
+        output: impl Write,
+        timestamp: chrono::DateTime<impl chrono::TimeZone>,
+        severity: Severity,
+        pairs: Pairs,
+    ) {
+        match self {
+            Self::Json => {
+                let mut values = serde_json::map::Map::new();
+                values.insert(
+                    "timestamp".to_owned(),
+                    serde_json::to_value(timestamp).unwrap(),
+                );
+                values.insert(
+                    "severity".to_owned(),
+                    serde_json::to_value(severity).unwrap(),
+                );
+                values.extend(pairs);
+                let mut serializer = serde_json::Serializer::new(output);
+                serde::Serialize::serialize(&values, &mut serializer).unwrap();
+                writeln!(serializer.into_inner()).unwrap();
+            }
+        }
+    }
+}
+
+/// A list of pairs, used internally when logging.
+pub struct Pairs(Vec<(String, serde_json::Value)>);
+
+impl Pairs {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self(Vec::with_capacity(capacity))
+    }
+
+    /// Adds a new pair to the list of pairs.
+    pub fn add(&mut self, name: String, value: serde_json::Value) {
+        self.0.push((name, value));
+    }
+}
+
+impl IntoIterator for Pairs {
+    type Item = (String, serde_json::Value);
+
+    type IntoIter = <Vec<(std::string::String, serde_json::Value)> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -387,7 +456,7 @@ mod tests {
         Ok(())
     }
 
-    fn capture_output(f: impl FnOnce(&mut dyn std::io::Write)) -> anyhow::Result<String> {
+    fn capture_output(f: impl FnOnce(&mut dyn Write)) -> anyhow::Result<String> {
         let mut buffer = BufWriter::new(Vec::new());
         f(&mut buffer);
         let output = String::from_utf8(buffer.into_inner()?)?;
