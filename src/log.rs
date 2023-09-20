@@ -86,6 +86,19 @@ pub enum Severity {
     Fatal,
 }
 
+impl Severity {
+    fn as_fixed_length_str(&self) -> &'static str {
+        match self {
+            Severity::Trace => "TRACE",
+            Severity::Debug => "DEBUG",
+            Severity::Info => "INFO ",
+            Severity::Warning => "WARN ",
+            Severity::Error => "ERROR",
+            Severity::Fatal => "FATAL",
+        }
+    }
+}
+
 /// Log at TRACE severity.
 ///
 /// ```ignore
@@ -169,6 +182,7 @@ macro_rules! log {
     ( $($tokens:tt)+ ) => {
         $crate::log::log_explicitly!(
             std::io::stderr(),
+            $crate::log::global_log_format(),
             chrono::offset::Utc::now(),
             $($tokens)+
         )
@@ -182,13 +196,13 @@ macro_rules! log {
 /// ```
 #[doc(hidden)]
 macro_rules! log_explicitly {
-    ( $output: expr, $timestamp: expr, $severity: expr, $($rest:tt)+ ) => {{
+    ( $output: expr, $log_format: expr, $timestamp: expr, $severity: expr, $($rest:tt)+ ) => {{
         #[allow(unused_imports)]
         use $crate::log::Loggable;
         #[allow(clippy::vec_init_then_push)]
         let mut pairs = $crate::log::Pairs::with_capacity($crate::log::count_pairs!($($rest)+));
         $crate::log::add_log_pairs!(pairs, $($rest)+);
-        $crate::log::LogFormat::Json.write($output, $timestamp, $severity, pairs);
+        $log_format.write($output, $timestamp, $severity, pairs);
     }};
 }
 
@@ -273,13 +287,14 @@ pub(crate) use warning;
 #[derive(Debug, Clone, Copy)]
 pub enum LogFormat {
     Json,
+    Text,
 }
 
 impl LogFormat {
     /// Writes the given items to the log output in the format specified.
     pub fn write(
         self,
-        output: impl Write,
+        mut output: impl Write,
         timestamp: chrono::DateTime<impl chrono::TimeZone>,
         severity: Severity,
         pairs: Pairs,
@@ -300,11 +315,27 @@ impl LogFormat {
                 serde::Serialize::serialize(&values, &mut serializer).unwrap();
                 writeln!(serializer.into_inner()).unwrap();
             }
+            Self::Text => {
+                write!(
+                    output,
+                    "{} [{}]",
+                    timestamp.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                    severity.as_fixed_length_str()
+                )
+                .unwrap();
+                let mut pairs_iter = pairs.into_iter();
+                if let Some((name, value)) = pairs_iter.next() {
+                    write!(output, " {} = {}", name, value).unwrap();
+                }
+                for (name, value) in pairs_iter {
+                    write!(output, ", {} = {}", name, value).unwrap();
+                }
+                writeln!(output).unwrap();
+            }
         }
     }
 }
 
-/// A list of pairs, used internally when logging.
 pub struct Pairs(Vec<(String, serde_json::Value)>);
 
 impl Pairs {
@@ -328,6 +359,11 @@ impl IntoIterator for Pairs {
     }
 }
 
+// TODO: actually implement this
+pub fn global_log_format() -> LogFormat {
+    LogFormat::Json
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -342,6 +378,7 @@ mod tests {
         let output = capture_output(|mut buffer| {
             log_explicitly!(
                 &mut buffer,
+                LogFormat::Json,
                 timestamp,
                 Severity::Debug,
                 a = 1,
@@ -366,6 +403,7 @@ mod tests {
         let output = capture_output(|mut buffer| {
             log_explicitly!(
                 &mut buffer,
+                LogFormat::Json,
                 timestamp,
                 Severity::Info,
                 numbers = vec![vec![1, 2], vec![3, 4]],
@@ -405,7 +443,14 @@ mod tests {
         let output = capture_output(|mut buffer| {
             let x = vec![1, 2, 3];
             let y = "hello";
-            log_explicitly!(&mut buffer, timestamp, Severity::Warning, x, y);
+            log_explicitly!(
+                &mut buffer,
+                LogFormat::Json,
+                timestamp,
+                Severity::Warning,
+                x,
+                y
+            );
         })?;
 
         assert_eq!(
@@ -426,7 +471,13 @@ mod tests {
                 code: "WHOOPS".to_owned(),
                 message: "Uh oh.".to_owned(),
             };
-            log_explicitly!(&mut buffer, timestamp, Severity::Error, error);
+            log_explicitly!(
+                &mut buffer,
+                LogFormat::Json,
+                timestamp,
+                Severity::Error,
+                error
+            );
         })?;
 
         assert_eq!(
@@ -444,12 +495,43 @@ mod tests {
 
         let output = capture_output(|mut buffer| {
             let error = std::io::Error::new(std::io::ErrorKind::TimedOut, "it took too long");
-            log_explicitly!(&mut buffer, timestamp, Severity::Error, error = error.log());
+            log_explicitly!(
+                &mut buffer,
+                LogFormat::Json,
+                timestamp,
+                Severity::Error,
+                error = error.log()
+            );
         })?;
 
         assert_eq!(
             output,
             r#"{"timestamp":"2023-09-05T00:00:00Z","severity":"ERROR","error":{"kind":"TimedOut","message":"it took too long"}}"#
+                .to_owned()
+                + "\n"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_logging_for_reading() -> anyhow::Result<()> {
+        let timestamp = chrono::DateTime::parse_from_rfc3339("2023-09-06T00:00:00Z")?;
+
+        let output = capture_output(|mut buffer| {
+            log_explicitly!(
+                &mut buffer,
+                LogFormat::Text,
+                timestamp,
+                Severity::Fatal,
+                its = ["the", "final", "countdown"],
+                da = 4,
+                dada = 5,
+            );
+        })?;
+
+        assert_eq!(
+            output,
+            r#"2023-09-06T00:00:00Z [FATAL] its = ["the","final","countdown"], da = 4, dada = 5"#
                 .to_owned()
                 + "\n"
         );
