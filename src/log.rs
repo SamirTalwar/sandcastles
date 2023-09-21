@@ -203,9 +203,9 @@ macro_rules! log_explicitly {
         #[allow(unused_imports)]
         use $crate::log::Loggable;
         #[allow(clippy::vec_init_then_push)]
-        let mut pairs = $crate::log::Pairs::with_capacity($crate::log::count_pairs!($($rest)+));
-        $crate::log::add_log_pairs!(pairs, $($rest)+);
-        $log_format.write($output, $timestamp, $severity, pairs);
+        let mut writer = $log_format.new_writer($timestamp, $severity);
+        $crate::log::add_log_pairs!(writer, $($rest)+);
+        writer.write($output);
     }};
 }
 
@@ -248,28 +248,7 @@ macro_rules! add_log_pairs {
     ( $builder:ident, ) => {};
 }
 
-// Counts the pairs.
-#[doc(hidden)]
-macro_rules! count_pairs {
-    ( $name:ident = $value:expr, $($rest:tt)* ) => {
-        1 + $crate::log::count_pairs!($($rest)*)
-    };
-
-    ( $name: ident = $value:expr ) => { 1 };
-
-    ( $name: ident, $($rest:tt)* ) => {
-        1 + $crate::log::count_pairs!($($rest)*)
-    };
-
-    ( $name: ident ) => { 1 };
-
-    ( , ) => { 0 };
-
-    ( ) => { 0 };
-}
-
 pub(crate) use add_log_pairs;
-pub(crate) use count_pairs;
 pub(crate) use log;
 pub(crate) use log_explicitly;
 
@@ -294,71 +273,99 @@ pub enum LogFormat {
 }
 
 impl LogFormat {
-    /// Writes the given items to the log output in the format specified.
-    pub fn write(
+    /// Constructs the underlying writer.
+    pub fn new_writer<W: Write>(
         self,
-        mut output: impl Write,
         timestamp: chrono::DateTime<impl chrono::TimeZone>,
         severity: Severity,
-        pairs: Pairs,
-    ) {
+    ) -> Box<dyn LogWriter<W>> {
         match self {
-            Self::Json => {
-                let mut values = serde_json::map::Map::new();
-                values.insert(
-                    "timestamp".to_owned(),
-                    serde_json::to_value(timestamp).unwrap(),
-                );
-                values.insert(
-                    "severity".to_owned(),
-                    serde_json::to_value(severity).unwrap(),
-                );
-                values.extend(pairs);
-                let mut serializer = serde_json::Serializer::new(output);
-                serde::Serialize::serialize(&values, &mut serializer).unwrap();
-                writeln!(serializer.into_inner()).unwrap();
-            }
-            Self::Text => {
-                write!(
-                    output,
-                    "{} [{}]",
-                    timestamp.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-                    severity.as_fixed_length_str()
-                )
-                .unwrap();
-                let mut pairs_iter = pairs.into_iter();
-                if let Some((name, value)) = pairs_iter.next() {
-                    write!(output, " {} = {}", name, value).unwrap();
-                }
-                for (name, value) in pairs_iter {
-                    write!(output, ", {} = {}", name, value).unwrap();
-                }
-                writeln!(output).unwrap();
-            }
+            Self::Json => Box::new(JsonLogWriter::new(timestamp, severity)),
+            Self::Text => Box::new(TextLogWriter::new(timestamp, severity)),
         }
     }
 }
 
-pub struct Pairs(Vec<(String, serde_json::Value)>);
+/// Builds a set of values and writes them to a writer.
+pub trait LogWriter<W: Write> {
+    /// Adds a new key-value pair.
+    fn add(&mut self, name: String, value: serde_json::Value);
 
-impl Pairs {
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self(Vec::with_capacity(capacity))
-    }
+    /// Writes the values to the writer.
+    fn write(&self, writer: W);
+}
 
-    /// Adds a new pair to the list of pairs.
-    pub fn add(&mut self, name: String, value: serde_json::Value) {
-        self.0.push((name, value));
+/// Writes the given values in JSON format.
+pub struct JsonLogWriter {
+    object: serde_json::map::Map<String, serde_json::Value>,
+}
+
+impl JsonLogWriter {
+    fn new(timestamp: chrono::DateTime<impl chrono::TimeZone>, severity: Severity) -> Self {
+        let mut object = serde_json::map::Map::new();
+        object.insert(
+            "timestamp".to_owned(),
+            serde_json::to_value(timestamp).unwrap(),
+        );
+        object.insert(
+            "severity".to_owned(),
+            serde_json::to_value(severity).unwrap(),
+        );
+        Self { object }
     }
 }
 
-impl IntoIterator for Pairs {
-    type Item = (String, serde_json::Value);
+impl<W: Write> LogWriter<W> for JsonLogWriter {
+    fn add(&mut self, name: String, value: serde_json::Value) {
+        self.object.insert(name, value);
+    }
 
-    type IntoIter = <Vec<(std::string::String, serde_json::Value)> as IntoIterator>::IntoIter;
+    fn write(&self, writer: W) {
+        let mut serializer = serde_json::Serializer::new(writer);
+        serde::Serialize::serialize(&self.object, &mut serializer).unwrap();
+        writeln!(serializer.into_inner()).unwrap();
+    }
+}
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
+/// Writes the given values in a pleasing text format.
+pub struct TextLogWriter {
+    timestamp: chrono::DateTime<chrono::FixedOffset>,
+    severity: Severity,
+    pairs: Vec<(String, serde_json::Value)>,
+}
+
+impl TextLogWriter {
+    fn new(timestamp: chrono::DateTime<impl chrono::TimeZone>, severity: Severity) -> Self {
+        Self {
+            timestamp: timestamp.fixed_offset(),
+            severity,
+            pairs: Vec::new(),
+        }
+    }
+}
+
+impl<W: Write> LogWriter<W> for TextLogWriter {
+    fn add(&mut self, name: String, value: serde_json::Value) {
+        self.pairs.push((name, value))
+    }
+
+    fn write(&self, mut writer: W) {
+        write!(
+            writer,
+            "{} [{}]",
+            self.timestamp
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            self.severity.as_fixed_length_str()
+        )
+        .unwrap();
+        let mut pairs_iter = self.pairs.iter();
+        if let Some((name, value)) = pairs_iter.next() {
+            write!(writer, " {} = {}", name, value).unwrap();
+        }
+        for (name, value) in pairs_iter {
+            write!(writer, ", {} = {}", name, value).unwrap();
+        }
+        writeln!(writer).unwrap();
     }
 }
 
