@@ -225,7 +225,7 @@ macro_rules! add_log_pairs {
     ( $builder:ident, $name: ident = $value:expr ) => {
         $builder.add(
             stringify!($name).to_owned(),
-            serde_json::to_value(&$value).unwrap(),
+            &$value,
         );
     };
 
@@ -289,7 +289,7 @@ impl LogFormat {
 /// Builds a set of values and writes them to a writer.
 pub trait LogWriter<W: Write> {
     /// Adds a new key-value pair.
-    fn add(&mut self, name: String, value: serde_json::Value);
+    fn add(&mut self, name: String, value: &dyn erased_serde::Serialize);
 
     /// Writes the values to the writer.
     fn write(&self, writer: W);
@@ -316,8 +316,9 @@ impl JsonLogWriter {
 }
 
 impl<W: Write> LogWriter<W> for JsonLogWriter {
-    fn add(&mut self, name: String, value: serde_json::Value) {
-        self.object.insert(name, value);
+    fn add(&mut self, name: String, value: &dyn erased_serde::Serialize) {
+        self.object
+            .insert(name, serde_json::to_value(value).unwrap());
     }
 
     fn write(&self, writer: W) {
@@ -331,7 +332,7 @@ impl<W: Write> LogWriter<W> for JsonLogWriter {
 pub struct TextLogWriter {
     timestamp: chrono::DateTime<chrono::FixedOffset>,
     severity: Severity,
-    pairs: Vec<(String, serde_json::Value)>,
+    pairs: Vec<(String, String)>,
 }
 
 impl TextLogWriter {
@@ -345,8 +346,9 @@ impl TextLogWriter {
 }
 
 impl<W: Write> LogWriter<W> for TextLogWriter {
-    fn add(&mut self, name: String, value: serde_json::Value) {
-        self.pairs.push((name, value))
+    fn add(&mut self, name: String, value: &dyn erased_serde::Serialize) {
+        let value_string = TEXT_SERIALIZER.to_string(value).unwrap();
+        self.pairs.push((name, value_string))
     }
 
     fn write(&self, mut writer: W) {
@@ -370,6 +372,10 @@ impl<W: Write> LogWriter<W> for TextLogWriter {
 }
 
 lazy_static! {
+    static ref TEXT_SERIALIZER: ron::Options = ron::Options::default()
+        .with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME)
+        .with_default_extension(ron::extensions::Extensions::UNWRAP_NEWTYPES)
+        .with_default_extension(ron::extensions::Extensions::UNWRAP_VARIANT_NEWTYPES);
     static ref LOG_FORMAT: RwLock<LogFormat> = RwLock::new(detect_log_format());
 }
 
@@ -544,15 +550,19 @@ mod tests {
                 LogFormat::Text,
                 timestamp,
                 Severity::Fatal,
-                its = ["the", "final", "countdown"],
+                its = vec!["the", "final", "countdown"],
                 da = 4,
                 dada = 5,
+                vocalist = Person {
+                    name: "Joey Tempest".to_owned(),
+                    age: 42
+                }
             );
         })?;
 
         assert_eq!(
             output,
-            r#"2023-09-06T00:00:00Z [FATAL] its = ["the","final","countdown"], da = 4, dada = 5"#
+            r#"2023-09-06T00:00:00Z [FATAL] its = ["the","final","countdown"], da = 4, dada = 5, vocalist = (name:"Joey Tempest",age:42)"#
                 .to_owned()
                 + "\n"
         );
