@@ -85,7 +85,7 @@ impl Error for DaemonError {}
 pub type CommunicationResult<A> = Result<A, CommunicationError>;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "code", rename_all = "SCREAMING_SNAKE_CASE")]
+#[serde(tag = "type", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum CommunicationError {
     SerializationError { message: String },
     DeserializationError { message: String },

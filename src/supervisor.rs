@@ -2,7 +2,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::communication::{ExitStatus, Start, Stop};
+use crate::communication::{ExitStatus, ServiceDetails, Services, Start, Stop};
 use crate::error::{DaemonError, DaemonResult};
 use crate::names::{random_name, Name};
 use crate::services::*;
@@ -20,6 +20,15 @@ impl Default for Supervisor {
 impl Supervisor {
     pub fn new() -> Self {
         Self(Arc::new(Mutex::new(RunningServices::new())))
+    }
+
+    pub fn list(&self) -> Services {
+        let inner = self.0.lock().unwrap();
+        inner
+            .0
+            .keys()
+            .map(|name| ServiceDetails { name: name.clone() })
+            .collect()
     }
 
     pub fn start(&self, instruction: &Start) -> DaemonResult<Name> {

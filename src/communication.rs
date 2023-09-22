@@ -10,6 +10,7 @@ pub(crate) enum Request {
     Ping,
     Start(Start),
     Stop(Stop),
+    List,
     Shutdown,
 }
 
@@ -37,6 +38,14 @@ pub(crate) enum StopResponse {
 }
 
 impl Response for StopResponse {}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) enum ListResponse {
+    Success(Services),
+    Failure(DaemonError),
+}
+
+impl Response for ListResponse {}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum ShutdownResponse {
@@ -71,6 +80,13 @@ pub struct Start {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Stop {
+    pub name: Name,
+}
+
+pub type Services = Vec<ServiceDetails>;
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, tabled::Tabled)]
+pub struct ServiceDetails {
     pub name: Name,
 }
 
@@ -143,6 +159,10 @@ mod tests {
                     duration: Duration::QUANTUM,
                 },
             }),
+            Request::Stop(Stop {
+                name: "enough".parse()?,
+            }),
+            Request::List,
             Request::Shutdown,
         ];
 

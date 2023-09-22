@@ -11,7 +11,9 @@ use std::sync::Mutex;
 use std::thread;
 
 use crate::awaiter::Awaiter;
-use crate::communication::{PingResponse, Request, Ship, ShutdownResponse, StartResponse};
+use crate::communication::{
+    ListResponse, PingResponse, Request, Ship, ShutdownResponse, StartResponse,
+};
 use crate::error::{CommunicationError, DaemonError, DaemonResult};
 use crate::log;
 use crate::supervisor::Supervisor;
@@ -180,6 +182,14 @@ fn handle_connection(
                         StopResponse::Failure(error)
                     }
                 };
+                log::debug!(event = "HANDLE", response);
+                response
+                    .write_to(&mut stream)
+                    .map_err(DaemonError::CommunicationError)
+            }
+            Request::List => {
+                log::info!(event = "LIST");
+                let response = ListResponse::Success(supervisor.list());
                 log::debug!(event = "HANDLE", response);
                 response
                     .write_to(&mut stream)

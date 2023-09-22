@@ -13,14 +13,14 @@ fn example_program() -> anyhow::Result<()> {
     let daemon_socket = daemon_socket_dir.path().join("socket");
 
     {
-        let daemon = Daemon::start_on_socket(daemon_socket.clone())?;
+        let _daemon = Daemon::start_on_socket(daemon_socket.clone())?;
 
         assert!(
             daemon_socket.exists(),
             "the daemon socket has not been created"
         );
 
-        let mut client = Client::connect_to(daemon.socket())?;
+        let mut client = Client::connect_to(&daemon_socket)?;
         client.start(Start {
             name: Some("hello".parse()?),
             service: http_hello_world(),
@@ -30,6 +30,14 @@ fn example_program() -> anyhow::Result<()> {
         assert!(
             SERVER_PORT.is_in_use(),
             "the service has not started correctly"
+        );
+
+        let running_services = client.list()?;
+        assert_eq!(
+            running_services,
+            vec![ServiceDetails {
+                name: "hello".parse()?
+            }]
         );
 
         let response_body = reqwest::blocking::get(server_url)?.text()?;

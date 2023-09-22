@@ -37,6 +37,7 @@ mod args {
         Stop {
             name: Name,
         },
+        List,
         Shutdown,
     }
 
@@ -94,6 +95,21 @@ fn main() -> anyhow::Result<ExitCode> {
             let mut client = Client::connect_to(&socket_path)?;
             let exit_status = client.stop(Stop { name })?;
             Ok(exit_status.into())
+        }
+        args::Command::List => {
+            let mut client = Client::connect_to(&socket_path)?;
+            let services = client.list()?;
+            println!(
+                "{}",
+                tabled::Table::new(services).with(
+                    tabled::settings::Style::sharp()
+                        .remove_top()
+                        .remove_bottom()
+                        .remove_left()
+                        .remove_right()
+                )
+            );
+            Ok(ExitCode::SUCCESS)
         }
         args::Command::Shutdown => {
             let mut client = Client::connect_to(&socket_path)?;

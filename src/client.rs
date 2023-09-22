@@ -38,6 +38,14 @@ impl Client {
             })
     }
 
+    pub fn list(&mut self) -> ClientResult<Services> {
+        self.send(&Request::List)
+            .and_then(|response| match response {
+                ListResponse::Success(services) => Ok(services),
+                ListResponse::Failure(error) => Err(ClientError::DaemonError(error)),
+            })
+    }
+
     pub fn shutdown(&mut self) -> ClientResult<()> {
         self.send(&Request::Shutdown)
             .map(|response| match response {
