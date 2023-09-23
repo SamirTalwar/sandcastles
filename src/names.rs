@@ -12,24 +12,23 @@ impl std::fmt::Display for Name {
 }
 
 impl std::str::FromStr for Name {
-    type Err = (); // should be `!` but that's experimental
+    type Err = NameError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self(s.to_owned()))
     }
 }
 
-impl From<&str> for Name {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
+#[derive(Debug)]
+pub enum NameError {}
+
+impl std::fmt::Display for NameError {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match *self {}
     }
 }
 
-impl From<String> for Name {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
+impl std::error::Error for NameError {}
 
 const ADJECTIVES_STR: &str = include_str!("names_adjectives.txt");
 const NOUNS_STR: &str = include_str!("names_nouns.txt");

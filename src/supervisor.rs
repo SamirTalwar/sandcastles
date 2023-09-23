@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_refuses_to_start_a_service_with_a_name_that_is_taken() -> anyhow::Result<()> {
-        let name = Name::from("double");
+        let name: Name = "double".parse()?;
         let output_directory = tempfile::tempdir()?;
         let output_file = output_directory.path().join("output.txt");
         let supervisor = Supervisor::new();
@@ -200,7 +200,7 @@ mod tests {
 
     #[test]
     fn test_refuses_to_stop_a_service_with_an_unknown_name() -> anyhow::Result<()> {
-        let name = Name::from("something");
+        let name: Name = "something".parse()?;
         let supervisor = Supervisor::new();
 
         let result = supervisor.stop(&Stop { name: name.clone() });
@@ -241,12 +241,12 @@ mod tests {
 
         let supervisor = Supervisor::new();
         let name = supervisor.start(&Start {
-            name: Some("thingamabob".into()),
+            name: Some("thingamabob".parse()?),
             service: test_services::file_watch(&output_file, vec!["echo".into(), "output".into()]),
             wait: WaitFor::AMoment,
         })?;
 
-        assert_eq!(name, "thingamabob".into());
+        assert_eq!(name, "thingamabob".parse()?);
         Ok(())
     }
 

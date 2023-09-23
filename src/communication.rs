@@ -114,7 +114,7 @@ mod tests {
     fn test_requests_are_serializable_and_deserializable() -> anyhow::Result<()> {
         let requests = vec![
             Request::Start(Start {
-                name: Some("hello".into()),
+                name: Some("hello".parse()?),
                 service: Service::Program(Program {
                     command: "program".into(),
                     arguments: vec!["one".into(), "two".into(), "three".into()],

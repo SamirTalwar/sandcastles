@@ -22,7 +22,7 @@ fn example_program() -> anyhow::Result<()> {
 
         let mut client = Client::connect_to(daemon.socket())?;
         client.start(Start {
-            name: Some("hello".into()),
+            name: Some("hello".parse()?),
             service: http_hello_world(),
             wait: WaitFor::Port { port: SERVER_PORT },
         })?;
