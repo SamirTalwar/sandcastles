@@ -4,6 +4,7 @@ use std::path::Path;
 use crate::communication::*;
 use crate::error::{ClientError, ClientResult};
 use crate::log;
+use crate::names::Name;
 
 pub struct Client {
     socket: UnixStream,

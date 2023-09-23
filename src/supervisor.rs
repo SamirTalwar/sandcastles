@@ -2,9 +2,9 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::communication::{ExitStatus, Name, Start, Stop};
+use crate::communication::{ExitStatus, Start, Stop};
 use crate::error::{DaemonError, DaemonResult};
-use crate::names::random_name;
+use crate::names::{random_name, Name};
 use crate::services::*;
 use crate::timing::Duration;
 
@@ -24,10 +24,7 @@ impl Supervisor {
 
     pub fn start(&self, instruction: &Start) -> DaemonResult<Name> {
         let mut inner = self.0.lock().unwrap();
-        let name = instruction
-            .name
-            .clone()
-            .unwrap_or_else(|| random_name().into());
+        let name = instruction.name.clone().unwrap_or_else(random_name);
         if inner.has_service_named(&name) {
             return Err(DaemonError::ServiceAlreadyExistsError { name });
         }

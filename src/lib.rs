@@ -19,6 +19,7 @@ mod test_services;
 pub use client::Client;
 pub use communication::*;
 pub use daemon::Daemon;
+pub use names::Name;
 pub use ports::Port;
 pub use services::*;
 pub use supervisor::Supervisor;

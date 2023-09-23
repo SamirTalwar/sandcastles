@@ -1,8 +1,8 @@
 use std::error::Error;
 use std::fmt::Display;
 
-use crate::communication::Name;
 use crate::log::LoggableIoError;
+use crate::names::Name;
 
 pub type ClientResult<A> = std::result::Result<A, ClientError>;
 
