@@ -67,9 +67,10 @@ impl Daemon {
                 StopHandle::Thread(_) => {
                     let awaiter = Awaiter::new();
                     let StopHandle::Thread(handle) =
-                        mem::replace(&mut *stop_handle, StopHandle::Awaiter(awaiter.clone())) else {
-                            unreachable!()
-                        };
+                        mem::replace(&mut *stop_handle, StopHandle::Awaiter(awaiter.clone()))
+                    else {
+                        unreachable!()
+                    };
                     (Some(handle), awaiter)
                 }
                 StopHandle::Awaiter(awaiter) => (None, awaiter.clone()),
