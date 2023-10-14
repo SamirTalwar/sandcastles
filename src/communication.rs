@@ -104,6 +104,7 @@ impl<A: serde::Serialize + for<'de> serde::Deserialize<'de> + Sized> Ship for A 
 mod tests {
     use std::collections::BTreeMap;
     use std::io;
+    use std::os::unix::net::{UnixListener, UnixStream};
 
     use anyhow::Context;
 
@@ -174,5 +175,92 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    // This is a fairly complicated test case that uses Unix sockets to create
+    // blocking I/O buffers that do not terminate until we ask them to.
+    //
+    // This allows us to verify that serialization and deserialization work
+    // across network I/O.
+    //
+    // We have to start a separate thread for the server side, and tell it what
+    // to do using an `mpsc` side-channel.
+    #[test]
+    fn test_serialization_across_io() -> anyhow::Result<()> {
+        // Create a Unix socket, with a listener (server) and a stream (client).
+        let socket_dir = tempfile::Builder::new()
+            .prefix("sandcastles-test")
+            .tempdir()?;
+        let socket_path = socket_dir.path().join("socket");
+        let server = UnixListener::bind(&socket_path)?;
+        let mut client = UnixStream::connect(&socket_path)?;
+
+        // Start a new thread that listens on the server socket and handles requests.
+        let (server_sender, server_receiver) = std::sync::mpsc::channel::<simple_server::Comm>();
+        let (client_sender, client_receiver) = std::sync::mpsc::channel::<simple_server::Comm>();
+        let thread_handle =
+            std::thread::spawn(|| simple_server::run(server, server_receiver, client_sender));
+
+        // Send a request from client to server, and ensure the server receives it.
+        let request = simple_server::TestValue { value: 7 };
+        request.write_to(&mut client)?;
+        server_sender.send(simple_server::Comm::Receive)?;
+        assert_eq!(client_receiver.recv()?, simple_server::Comm::Send(request));
+
+        // Send a response from server to client, and ensure the client receives it.
+        let response = simple_server::TestValue { value: 1 };
+        server_sender.send(simple_server::Comm::Send(response.clone()))?;
+        assert_eq!(client_receiver.recv()?, simple_server::Comm::Receive);
+        assert_eq!(simple_server::TestValue::read_from(&mut client)?, response);
+
+        // Shut down the server.
+        server_sender.send(simple_server::Comm::Shutdown)?;
+        assert_eq!(client_receiver.recv()?, simple_server::Comm::Shutdown);
+        thread_handle.join().unwrap()?;
+
+        Ok(())
+    }
+
+    pub(crate) mod simple_server {
+        use crate::communication::Ship;
+        use std::os::unix::net::UnixListener;
+        use std::sync::mpsc;
+
+        pub fn run(
+            server: UnixListener,
+            server_receiver: mpsc::Receiver<Comm>,
+            client_sender: mpsc::Sender<Comm>,
+        ) -> anyhow::Result<()> {
+            let (mut stream, _) = server.accept()?;
+            loop {
+                match server_receiver.recv()? {
+                    Comm::Receive => {
+                        let response = TestValue::read_from(&mut stream)?;
+                        client_sender.send(Comm::Send(response))?;
+                    }
+                    Comm::Send(value) => {
+                        value.write_to(&mut stream)?;
+                        client_sender.send(Comm::Receive)?;
+                    }
+                    Comm::Shutdown => {
+                        client_sender.send(Comm::Shutdown)?;
+                        break;
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+        pub struct TestValue {
+            pub value: i32,
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        pub enum Comm {
+            Receive,
+            Send(TestValue),
+            Shutdown,
+        }
     }
 }
