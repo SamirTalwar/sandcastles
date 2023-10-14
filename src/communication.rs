@@ -105,6 +105,8 @@ mod tests {
     use std::collections::BTreeMap;
     use std::io;
 
+    use anyhow::Context;
+
     use crate::services::programs::Program;
     use crate::timing::Duration;
 
@@ -163,8 +165,11 @@ mod tests {
         ];
 
         for error in errors {
-            let serialized = error.serialize()?;
-            let deserialized = DaemonError::deserialize(&serialized)?;
+            let serialized = error
+                .serialize()
+                .context(format!("serializing {:?}", error))?;
+            let deserialized = DaemonError::deserialize(&serialized)
+                .context(format!("deserializing {:?}", error))?;
             assert_eq!(deserialized, error);
         }
 
