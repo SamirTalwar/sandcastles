@@ -11,8 +11,8 @@ use std::sync::Mutex;
 use std::thread;
 
 use crate::awaiter::Awaiter;
-use crate::communication::{Request, Ship, ShutdownResponse, StartResponse};
-use crate::error::{DaemonError, DaemonResult};
+use crate::communication::{PingResponse, Request, Ship, ShutdownResponse, StartResponse};
+use crate::error::{CommunicationError, DaemonError, DaemonResult};
 use crate::log;
 use crate::supervisor::Supervisor;
 use crate::timing::Duration;
@@ -143,41 +143,57 @@ fn handle_connection(
     supervisor: &Supervisor,
     stop_sender: mpsc::Sender<UnixStream>,
 ) -> DaemonResult<()> {
-    let request = Request::read_from(&mut stream).map_err(DaemonError::CommunicationError)?;
-    log::debug!(event = "HANDLE", request);
-    match request {
-        Request::Start(instruction) => {
-            log::info!(event = "START", instruction);
-            let response = match supervisor.start(&instruction) {
-                Ok(name) => StartResponse::Success(name),
-                Err(error) => {
-                    log::warning!(event = "START", instruction, error);
-                    StartResponse::Failure(error)
-                }
-            };
-            log::debug!(event = "HANDLE", response);
-            response
-                .write_to(&mut stream)
-                .map_err(DaemonError::CommunicationError)
-        }
-        Request::Stop(instruction) => {
-            log::info!(event = "STOP", instruction);
-            let response = match supervisor.stop(&instruction) {
-                Ok(exit_status) => StopResponse::Success(exit_status),
-                Err(error) => {
-                    log::warning!(event = "STOP", instruction, error);
-                    StopResponse::Failure(error)
-                }
-            };
-            log::debug!(event = "HANDLE", response);
-            response
-                .write_to(&mut stream)
-                .map_err(DaemonError::CommunicationError)
-        }
-        Request::Shutdown => stop_sender
-            .send(stream)
-            .map_err(|_| DaemonError::ShutdownRequestError),
+    loop {
+        let request = match Request::read_from(&mut stream) {
+            Ok(request) => request,
+            Err(CommunicationError::ConnectionTerminated) => return Ok(()),
+            Err(error) => return Err(DaemonError::CommunicationError(error)),
+        };
+        log::debug!(event = "HANDLE", request);
+        match request {
+            Request::Ping => {
+                log::info!(event = "PING");
+                PingResponse::Pong
+                    .write_to(&mut stream)
+                    .map_err(DaemonError::CommunicationError)
+            }
+            Request::Start(instruction) => {
+                log::info!(event = "START", instruction);
+                let response = match supervisor.start(&instruction) {
+                    Ok(name) => StartResponse::Success(name),
+                    Err(error) => {
+                        log::warning!(event = "START", instruction, error);
+                        StartResponse::Failure(error)
+                    }
+                };
+                log::debug!(event = "HANDLE", response);
+                response
+                    .write_to(&mut stream)
+                    .map_err(DaemonError::CommunicationError)
+            }
+            Request::Stop(instruction) => {
+                log::info!(event = "STOP", instruction);
+                let response = match supervisor.stop(&instruction) {
+                    Ok(exit_status) => StopResponse::Success(exit_status),
+                    Err(error) => {
+                        log::warning!(event = "STOP", instruction, error);
+                        StopResponse::Failure(error)
+                    }
+                };
+                log::debug!(event = "HANDLE", response);
+                response
+                    .write_to(&mut stream)
+                    .map_err(DaemonError::CommunicationError)
+            }
+            Request::Shutdown => {
+                stop_sender
+                    .send(stream)
+                    .map_err(|_| DaemonError::ShutdownRequestError)?;
+                break;
+            }
+        }?;
     }
+    Ok(())
 }
 
 fn stop_requested(

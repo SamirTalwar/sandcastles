@@ -18,6 +18,10 @@ impl Client {
         Ok(Client { socket })
     }
 
+    pub fn ping(&mut self) -> ClientResult<()> {
+        self.send(&Request::Ping).map(|PingResponse::Pong| ())
+    }
+
     pub fn start(&mut self, instruction: Start) -> ClientResult<Name> {
         self.send(&Request::Start(instruction))
             .and_then(|response| match response {
@@ -49,5 +53,41 @@ impl Client {
         let response = R::read_from(&mut self.socket).map_err(ClientError::CommunicationError)?;
         log::debug!(response);
         Ok(response)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::daemon::Daemon;
+
+    use super::*;
+
+    #[test]
+    fn test_sends_request() -> anyhow::Result<()> {
+        let socket_dir = tempfile::Builder::new()
+            .prefix("sandcastles-test")
+            .tempdir()?;
+        let socket_path = socket_dir.path().join("socket");
+        let daemon = Daemon::start_on_socket(socket_path)?;
+        let mut client = Client::connect_to(daemon.socket())?;
+
+        client.ping()?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_sends_request_twice() -> anyhow::Result<()> {
+        let socket_dir = tempfile::Builder::new()
+            .prefix("sandcastles-test")
+            .tempdir()?;
+        let socket_path = socket_dir.path().join("socket");
+        let daemon = Daemon::start_on_socket(socket_path)?;
+        let mut client = Client::connect_to(daemon.socket())?;
+
+        client.ping()?;
+        client.ping()?;
+
+        Ok(())
     }
 }

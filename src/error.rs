@@ -89,6 +89,7 @@ pub type CommunicationResult<A> = Result<A, CommunicationError>;
 pub enum CommunicationError {
     SerializationError { message: String },
     DeserializationError { message: String },
+    ConnectionTerminated,
 }
 
 impl Display for CommunicationError {
@@ -100,6 +101,7 @@ impl Display for CommunicationError {
             Self::DeserializationError { message } => {
                 write!(f, "deserialization error: {}", message)
             }
+            Self::ConnectionTerminated => write!(f, "connection terminated"),
         }
     }
 }

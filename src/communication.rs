@@ -7,12 +7,20 @@ use crate::wait::WaitFor;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum Request {
+    Ping,
     Start(Start),
     Stop(Stop),
     Shutdown,
 }
 
 pub trait Response: Ship {}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) enum PingResponse {
+    Pong,
+}
+
+impl Response for PingResponse {}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum StartResponse {
@@ -84,10 +92,15 @@ pub trait Ship: Sized {
 
 impl<A: serde::Serialize + for<'de> serde::Deserialize<'de> + Sized> Ship for A {
     fn read_from(reader: impl io::Read) -> CommunicationResult<Self> {
-        rmp_serde::decode::from_read(reader).map_err(|error| {
-            CommunicationError::DeserializationError {
-                message: error.to_string(),
+        rmp_serde::decode::from_read(reader).map_err(|error| match error {
+            rmp_serde::decode::Error::InvalidMarkerRead(io_error)
+                if io_error.kind() == io::ErrorKind::UnexpectedEof =>
+            {
+                CommunicationError::ConnectionTerminated
             }
+            error => CommunicationError::DeserializationError {
+                message: error.to_string(),
+            },
         })
     }
 
